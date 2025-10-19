@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Grafo del Ciclo del Agua</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style>
+    #grafo {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h2>Ciclo del Agua - Grafo Conceptual</h2>
+  <div id="grafo"></div>
+
+  <script>
+    // --- JSON del grafo ---
+    const grafo = {
+      "titulo": "Ciclo del Agua",
+      "nodos": [
+        { "id": "agua", "etiqueta": "Agua" },
+        { "id": "evaporacion", "etiqueta": "Evaporación" },
+        { "id": "condensacion", "etiqueta": "Condensación" },
+        { "id": "precipitacion", "etiqueta": "Precipitación" },
+        { "id": "infiltracion", "etiqueta": "Infiltración" },
+        { "id": "escorrentia", "etiqueta": "Escorrentía" },
+        { "id": "superficie", "etiqueta": "Superficie terrestre" },
+        { "id": "atmosfera", "etiqueta": "Atmósfera" },
+        { "id": "vida", "etiqueta": "Equilibrio y vida en la Tierra" }
+      ],
+      "relaciones": [
+        { "origen": "agua", "destino": "evaporacion", "tipo": "se calienta" },
+        { "origen": "evaporacion", "destino": "atmosfera", "tipo": "asciende" },
+        { "origen": "atmosfera", "destino": "condensacion", "tipo": "se enfría" },
+        { "origen": "condensacion", "destino": "precipitacion", "tipo": "genera" },
+        { "origen": "precipitacion", "destino": "superficie", "tipo": "cae sobre" },
+        { "origen": "superficie", "destino": "infiltracion", "tipo": "se filtra" },
+        { "origen": "superficie", "destino": "escorrentia", "tipo": "fluye" },
+        { "origen": "infiltracion", "destino": "agua", "tipo": "retorna" },
+        { "origen": "escorrentia", "destino": "agua", "tipo": "retorna" },
+        { "origen": "agua", "destino": "vida", "tipo": "mantiene" }
+      ]
+    };
+
+    // --- Convertir JSON a formato vis-network ---
+    const nodes = new vis.DataSet(grafo.nodos.map(n => ({
+      id: n.id,
+      label: n.etiqueta
+    })));
+
+    const edges = new vis.DataSet(grafo.relaciones.map(r => ({
+      from: r.origen,
+      to: r.destino,
+      label: r.tipo,
+      arrows: "to"
+    })));
+
+    // --- Crear red ---
+    const container = document.getElementById("grafo");
+    const data = { nodes, edges };
+    const options = {
+      nodes: {
+        shape: "ellipse",
+        color: { background: "#A7C7E7", border: "#2B7CE9" },
+        font: { size: 16 }
+      },
+      edges: {
+        font: { align: "middle" },
+        color: { color: "#555" },
+        smooth: true
+      },
+      physics: {
+        enabled: true,
+        solver: "forceAtlas2Based"
+      }
+    };
+    new vis.Network(container, data, options);
+  </script>
+</body>
+</html>
