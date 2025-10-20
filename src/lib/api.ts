@@ -21,21 +21,23 @@ async function fetchApi(endpoint: string, options: RequestInit = {}) {
 }
 
 // Auth (RF05)
-export const createUser = (persona_type: string = 'estudiante'): Promise<{ user_id: string }> => {
+export const createUser = (requestData: { user_id?: string } = {}): Promise<{ user_id: string }> => {
   return fetchApi('/create_user', {
     method: 'POST',
-    body: JSON.stringify({ persona_type }),
+    body: JSON.stringify({ requestData }),
   });
 };
 
 // Graph History (RF05)
 export const getGraphHistory = (user_id: string): Promise<{ graphs: GraphSummary[] }> => {
+  if (!user_id) return Promise.resolve({ graphs: [] }); // Evitar llamar con null
   return fetchApi(`/graph_history/${user_id}`);
 };
 
 // Graph Data (CU-01)
-export const getGraph = (graph_id: string): Promise<{ graph: GraphData }> => {
-  return fetchApi(`/get_graph/${graph_id}`);
+export const getGraph = (user_id: string, graph_id: string): Promise<{ graph: GraphData }> => {
+   if (!user_id || !graph_id) return Promise.reject("User ID y Graph ID son requeridos"); // Evitar llamadas inválidas
+  return fetchApi(`/get_graph/${user_id}/${graph_id}`); // Ruta actualizada
 };
 
 // Generate/Refine (RF01, RF04, CU-01)
@@ -106,25 +108,38 @@ export const uploadFile = async (file: File): Promise<{ extracted_text: string |
 // Contextual Help (RF07)
 export const getContextualHelp = (
   message: string,
-  previous_graph: GraphData | null
+  previous_graph: GraphData | null,
+  user_id: string // Añadir user_id si tu API lo necesita, aunque este no lo usa directamente
 ): Promise<{ help: string }> => {
   return fetchApi('/contextual_help', {
     method: 'POST',
-    body: JSON.stringify({
-      message,
-      previous_graph,
-      user_id: 'contextual_help_user', // user_id no es crítico aquí
-    }),
+    body: JSON.stringify({ message, previous_graph, user_id }), // user_id podría no ser necesario aquí
   });
 };
 
 // Analytics (RF09)
 export const getAnalytics = (graph_id: string): Promise<{ analytics: any }> => {
-  return fetchApi('/analyze_graph', {
+  // El backend ahora usa ExportRequest que solo necesita graph_id y format (dummy)
+   return fetchApi('/analyze_graph', {
     method: 'POST',
-    body: JSON.stringify({ graph_id, format: 'json' }), // format es dummy, endpoint no lo usa
+    body: JSON.stringify({ graph_id, format: 'json' }), // format es dummy
   });
 };
+
+
+export const updatePreferences = (user_id: string, content: Record<string, any>): Promise<{ preferences: Record<string, any> }> => {
+  return fetchApi('/update_preferences', {
+    method: 'POST',
+    body: JSON.stringify({ user_id, content }),
+  });
+};
+
+export const getPreferences = (user_id: string): Promise<{ preferences: Record<string, any> }> => {
+  if (!user_id) return Promise.resolve({ preferences: {} });
+  return fetchApi(`/get_preferences/${user_id}`);
+};
+
+
 
 // Comments (RF06, CU-03)
 export const addComment = (
