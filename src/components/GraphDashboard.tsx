@@ -1,11 +1,14 @@
 // src/components/GraphDashboard.tsx
 import { useState, useEffect, useRef } from 'react';
 import * as api from '../lib/api';
-import { GraphSummary, GraphData, Node as NodeType } from '../lib/types';
+import { GraphSummary, GraphData, Node as NodeType, Preferences } from '../lib/types'; // Importar Preferences
 import { GraphVisualization, GraphVisualizationHandle } from './GraphVisualization';
 import { NodeDetailModal } from './NodeDetailModal';
+import { SettingsModal } from './SettingsModal'; // <-- 1. Importar el nuevo modal
 import {
-  Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload, HelpCircle, BarChart2, Save, LogOut
+  Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload,
+  HelpCircle, BarChart2, Save, LogOut,
+  Settings // <-- 2. Importar el ícono de Ajustes
 } from 'lucide-react';
 
 interface ModalNode extends NodeType {}
@@ -15,6 +18,13 @@ interface GraphDashboardProps {
   onLogout: () => void;
 }
 
+// Valores por defecto para las preferencias
+const defaultPreferences: Preferences = {
+  theme: 'dark',
+  detail_level: 'detailed',
+  persona_type: 'estudiante',
+};
+
 export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   const [user_id, setUserId] = useState<string | null>(() => sessionStorage.getItem('knowledge_graph_user_id'));
   const [graphs, setGraphs] = useState<GraphSummary[]>([]);
@@ -22,9 +32,13 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [inputText, setInputText] = useState('');
   const [actionType, setActionType] = useState<'create' | 'refine' | 'add_content' | 'focus'>('create');
-  const [loading, setLoading] = useState(false);
+  
+  const [loading, setLoading] = useState(false); 
+  const [settingsLoading, setSettingsLoading] = useState(false);
   const [error, setError] = useState('');
   const [modalNode, setModalNode] = useState<ModalNode | null>(null);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
 
   const ws = useRef<WebSocket | null>(null);
   const graphRef = useRef<GraphVisualizationHandle>(null);
@@ -53,6 +67,24 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   }, []);
 
   useEffect(() => {
+    const loadPreferences = async () => {
+      if (!user_id) return; // Esperar a tener user_id
+      
+      console.log("Cargando preferencias del usuario...");
+      try {
+        const data = await api.getPreferences(user_id);
+        // Fusionar defaults con lo guardado para evitar campos undefined
+        setPreferences({ ...defaultPreferences, ...data.preferences }); 
+      } catch (err: any) {
+        console.error("Error al cargar preferencias:", err);
+        // No es un error crítico, usar defaults
+      }
+    };
+    
+    loadPreferences();
+  }, [user_id]);
+
+  useEffect(() => {
     const loadGraphs = async () => {
       if (!user_id) return;
       setLoading(true); setError('');
@@ -66,7 +98,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     loadGraphs();
   }, [user_id]);
 
-   useEffect(() => {
+  useEffect(() => {
     const loadGraphData = async (graphId: string) => {
       setLoading(true); setError('');
       try {
@@ -148,8 +180,10 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     if (!user_id) return;
     setLoading(true); setError('');
     try {
-      const result = await api.getContextualHelp(inputText || 'Ayuda general', graphData.nodes.length > 0 ? graphData : null, user_id);
-      alert(`Sugerencia (RF07):\n\n${result.help}`);
+      // Añadimos el tipo de persona al prompt de ayuda (RF05 + RF07)
+      const helpMessage = `Como un ${preferences.persona_type}, necesito ayuda con: ${inputText || 'ayuda general'}`;
+      const result = await api.getContextualHelp(helpMessage, graphData.nodes.length > 0 ? graphData : null, user_id);
+      alert(`Sugerencia para ${preferences.persona_type} (RF07):\n\n${result.help}`);
     } catch (err: any) { setError(err.message || 'Error al obtener ayuda'); }
     finally { setLoading(false); }
   };
@@ -187,31 +221,59 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     }
   };
 
+  const handleSaveSettings = async (newPreferences: Preferences) => {
+    if (!user_id) {
+      setError("No se puede guardar, sesión no iniciada.");
+      return;
+    }
+    setSettingsLoading(true);
+    try {
+      const data = await api.updatePreferences(user_id, newPreferences);
+      setPreferences(data.preferences); // Actualizar estado local
+      setShowSettingsModal(false); // Cerrar modal
+    } catch (err: any) {
+      console.error("Error al guardar preferencias:", err);
+      setError(err.message || "No se pudo guardar preferencias.");
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const themeClass = preferences.theme === 'light' ? 'theme-light' : 'theme-dark';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-      <header className="border-b border-slate-700 bg-slate-900 bg-opacity-50 backdrop-blur-sm">
+    <div className={`min-h-screen bg-gradient-to-br ${themeClass}`}>
+      <header className="border-b border-theme-border bg-theme-header-bg bg-opacity-50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">EduMap</h1>
+          <h1 className="text-2xl font-bold text-theme-text-primary">EduMap</h1>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400 hidden sm:inline">{userEmail}</span>
+            <span className="text-sm text-theme-text-secondary hidden sm:inline">{userEmail}</span>
              <div className="flex items-center gap-1">
-                <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"> <Save size={20} /> </button>
-                <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-slate-700 rounded-lg transition-colors"> <HelpCircle size={20} /> </button>
-                <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"> <BarChart2 size={20} /> </button>
-                <label htmlFor="file-upload" title="Subir Archivo (.txt, .pdf, .mp3, etc.)" className="p-2 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"> <Upload size={20} /> </label>
+                <button
+                  onClick={() => setShowSettingsModal(true)}
+                  title="Ajustes de Personalización (RF05)"
+                  className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"
+                >
+                  <Settings size={20} />
+                </button>
+
+                <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
+                <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <HelpCircle size={20} /> </button>
+                <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <BarChart2 size={20} /> </button>
+                <label htmlFor="file-upload" title="Subir Archivo (.txt, .pdf, .mp3, etc.)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon cursor-pointer"> <Upload size={20} /> </label>
                 <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload}/>
              </div>
-            <button onClick={onLogout} className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-sm">
+            <button onClick={onLogout} className="flex items-center gap-2 px-3 py-1.5 bg-theme-secondary-bg hover:bg-theme-hover rounded-lg transition-colors text-sm text-theme-text-secondary">
               <LogOut size={16} /> Salir
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 text-theme-text-primary">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-180px)]">
-           <div className="lg:col-span-1 space-y-4 overflow-auto">
-             <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+           <div className="lg-col-span-1 space-y-4 overflow-auto">
+             <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <h2 className="text-lg font-semibold mb-4">Grafos de esta Sesión</h2>
                  {loading && graphs.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
                  {!loading && graphs.length === 0 && !error && <p className="text-sm text-slate-500">Crea tu primer grafo.</p>}
@@ -224,7 +286,8 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                     ))}
                 </div>
              </div>
-              <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+
+             <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                    <h3 className="text-sm font-semibold mb-3">Tipo de Acción</h3>
                    <div className="space-y-2">
                       <button onClick={() => setActionType('create')} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'create' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}> <Plus size={16} /> Crear Nuevo </button>
@@ -237,35 +300,38 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
 
             {/* --- INICIO DEL BLOQUE CORREGIDO --- */}
            <div className="lg:col-span-3 flex flex-col gap-4">
-              <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Escribe texto, una instrucción (ej: 'Refinar sobre...') o sube un archivo para empezar."
-                  className="w-full h-32 px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  placeholder="Escribe texto, una instrucción..."
+                  className="w-full h-32 px-4 py-3 bg-theme-input-bg border border-theme-border rounded-lg text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
                 {error && (<div className="mt-2 text-sm text-red-400">{error}</div>)}
                 <button
                   onClick={() => handleGenerateGraph(false)}
                   disabled={loading || !user_id}
-                  className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
                 >
                   {loading ? (<><Loader2 size={20} className="animate-spin" /> Generando...</>) : (<><Sparkles size={20} /> Generar / Modificar Grafo</>)}
                 </button>
               </div>
 
-                <div className="flex-1 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-                    {loading && <div className="flex items-center justify-center h-full text-slate-400"><Loader2 className="animate-spin mr-2"/> Cargando...</div>}
+                <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-hidden">
+                    {loading && <div className="flex items-center justify-center h-full text-theme-text-secondary"><Loader2 className="animate-spin mr-2"/> Cargando...</div>}
                     {!loading && graphData.nodes.length > 0 ? (
                         <GraphVisualization
                             ref={graphRef}
                             nodes={graphData.nodes}
                             edges={graphData.edges}
                             onNodeClick={handleNodeClick}
+                            // --- 8. Pasar nivel de detalle (RF05) ---
+                            detailLevel={preferences.detail_level}
+                            theme={preferences.theme}
                         />
                     ) : (
                        !loading && (
-                         <div className="flex items-center justify-center h-full text-slate-400">
+                         <div className="flex items-center justify-center h-full text-theme-text-secondary">
                             <div className="text-center">
                                 <FileText size={48} className="mx-auto mb-4 opacity-50" />
                                 <p>{selectedGraph ? 'Este grafo está vacío.' : 'Selecciona un grafo o crea uno nuevo para empezar'}</p>
@@ -275,10 +341,18 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                     )}
                 </div>
            </div>
-           {/* --- FIN DEL BLOQUE CORREGIDO --- */}
-
         </div>
       </div>
+
+      {/* --- 9. Renderizar el Modal de Ajustes --- */}
+       {showSettingsModal && (
+        <SettingsModal
+          currentPreferences={preferences}
+          onClose={() => setShowSettingsModal(false)}
+          onSave={handleSaveSettings}
+          isLoading={settingsLoading}
+        />
+       )}
 
        {modalNode && (
         <NodeDetailModal

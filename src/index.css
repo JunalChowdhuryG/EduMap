@@ -1,3 +1,66 @@
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* --- AÑADIR ESTAS CLASES DE TEMA (RF05) --- */
+
+/* Tema Oscuro (Default) */
+.theme-dark {
+  --theme-bg-gradient-from: #1e293b; /* from-slate-900 */
+  --theme-bg-gradient-via: #1e293b; /* via-slate-800 */
+  --theme-bg-gradient-to: #0f172a; /* to-slate-900 */
+  --theme-header-bg: #1e293b; /* bg-slate-900 */
+  --theme-secondary-bg: #1e293b; /* bg-slate-800 */
+  --theme-input-bg: #334155; /* bg-slate-700 */
+  --theme-border: #334155; /* border-slate-700 */
+  --theme-hover: #334155; /* hover:bg-slate-700 */
+  --theme-text-primary: #f1f5f9; /* text-white */
+  --theme-text-secondary: #94a3b8; /* text-slate-400 */
+  --theme-icon: #94a3b8; /* text-slate-400 */
+}
+
+/* Tema Claro */
+.theme-light {
+  --theme-bg-gradient-from: #f1f5f9; /* from-slate-100 */
+  --theme-bg-gradient-via: #f8fafc; /* via-slate-50 */
+  --theme-bg-gradient-to: #f1f5f9; /* to-slate-100 */
+  --theme-header-bg: #ffffff; /* bg-white */
+  --theme-secondary-bg: #ffffff; /* bg-white */
+  --theme-input-bg: #f1f5f9; /* bg-slate-100 */
+  --theme-border: #e2e8f0; /* border-slate-200 */
+  --theme-hover: #f1f5f9; /* hover:bg-slate-100 */
+  --theme-text-primary: #0f172a; /* text-slate-900 */
+  --theme-text-secondary: #64748b; /* text-slate-500 */
+  --theme-icon: #475569; /* text-slate-600 */
+}
+
+/* Tema Ocean (Ejemplo extra) */
+.theme-ocean {
+  --theme-bg-gradient-from: #0c4a6e; /* from-sky-800 */
+  --theme-bg-gradient-via: #075985; /* via-sky-900 */
+  --theme-bg-gradient-to: #0c4a6e; /* to-sky-800 */
+  --theme-header-bg: #0369a1; /* bg-sky-700 */
+  --theme-secondary-bg: #075985; /* bg-sky-900 */
+  --theme-input-bg: #0c4a6e; /* bg-sky-800 */
+  --theme-border: #0ea5e9; /* border-sky-500 */
+  --theme-hover: #0369a1; /* hover:bg-sky-700 */
+  --theme-text-primary: #f0f9ff; /* text-sky-50 */
+  --theme-text-secondary: #bae6fd; /* text-sky-200 */
+  --theme-icon: #e0f2fe; /* text-sky-100 */
+}
+
+/* Aplicar variables CSS */
+.bg-theme-header-bg { background-color: var(--theme-header-bg); }
+.bg-theme-secondary-bg { background-color: var(--theme-secondary-bg); }
+.bg-theme-input-bg { background-color: var(--theme-input-bg); }
+.border-theme-border { border-color: var(--theme-border); }
+.hover\:bg-theme-hover:hover { background-color: var(--theme-hover); }
+.text-theme-text-primary { color: var(--theme-text-primary); }
+.text-theme-text-secondary { color: var(--theme-text-secondary); }
+.text-theme-icon { color: var(--theme-icon); }
+.placeholder-theme-text-secondary::placeholder { color: var(--theme-text-secondary); }
+
+.bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
+}

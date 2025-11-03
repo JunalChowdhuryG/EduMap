@@ -11,8 +11,8 @@ export interface Node {
   id: string;
   label: string;
   description?: string;
-  type: string; // 'concepto_principal', 'entidad', etc.
-  color?: string; // <-- AÑADIDO: para la jerarquía
+  type: string;
+  color?: string;
   comments?: Array<{
     user_id: string;
     text: string;
@@ -31,4 +31,12 @@ export interface GraphData {
   nodes: Node[];
   edges: Edge[];
   summary?: string;
+}
+
+// --- AÑADIR ESTA INTERFAZ ---
+// Define la estructura de las preferencias del usuario (RF05)
+export interface Preferences {
+  theme: 'dark' | 'light' | 'ocean'; // Temas visuales
+  detail_level: 'simple' | 'detailed'; // Nivel de detalle
+  persona_type: 'estudiante' | 'profesor' | 'investigador'; // User Persona
 }

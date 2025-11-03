@@ -1,5 +1,5 @@
 // src/lib/api.ts
-import { GraphSummary, GraphData } from './types';
+import { GraphSummary, GraphData, Preferences} from './types';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -32,7 +32,6 @@ export const getGraphHistory = (user_id: string): Promise<{ graphs: GraphSummary
 // --- CORREGIDO: getGraph ---
 export const getGraph = (graph_id: string): Promise<{ graph: GraphData }> => {
    if (!graph_id) return Promise.reject("Graph ID es requerido");
-  // La API ahora solo necesita el graph_id
   return fetchApi(`/get_graph/${graph_id}`);
 };
 
@@ -101,5 +100,21 @@ export const addComment = (graph_id: string, node_id: string, text: string, user
   return fetchApi('/add_comment', {
     method: 'POST',
     body: JSON.stringify({ graph_id, node_id, text, user_id }),
+  });
+};
+
+
+export const getPreferences = (user_id: string): Promise<{ preferences: Partial<Preferences> }> => {
+  if (!user_id) return Promise.resolve({ preferences: {} });
+  return fetchApi(`/get_preferences/${user_id}`);
+};
+
+/**
+ * Guarda/Actualiza las preferencias de un usuario.
+ */
+export const updatePreferences = (user_id: string, content: Preferences): Promise<{ preferences: Preferences }> => {
+  return fetchApi('/update_preferences', {
+    method: 'POST',
+    body: JSON.stringify({ user_id, content }),
   });
 };

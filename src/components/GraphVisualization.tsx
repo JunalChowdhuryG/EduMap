@@ -1,7 +1,7 @@
 // src/components/GraphVisualization.tsx
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import ForceGraph2D, { ForceGraphMethods, LinkObject } from 'react-force-graph-2d';
-import { Node, Edge } from '../lib/types';
+import { Node, Edge, Preferences } from '../lib/types'; // Importar Preferences
 
 interface GraphNode {
   id: string;
@@ -11,7 +11,6 @@ interface GraphNode {
   color?: string;
   val: number;
   comments?: any[];
-  // Necesitamos asegurar que x, y estén presentes para nodeCanvasObject
   x?: number;
   y?: number;
 }
@@ -23,10 +22,14 @@ interface GraphLink {
   relationship_type: string;
 }
 
+
+
 interface GraphVisualizationProps {
   nodes: Node[];
   edges: Edge[];
-  onNodeClick?: (node: Node) => void; // Cambiado para devolver el tipo Node original
+  onNodeClick?: (node: Node) => void;
+  detailLevel: Preferences['detail_level']; // Nivel de detalle
+  theme: Preferences['theme']; // Tema
 }
 
 export interface GraphVisualizationHandle {
@@ -34,21 +37,15 @@ export interface GraphVisualizationHandle {
 }
 
 export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisualizationProps>(
-  ({ nodes, edges, onNodeClick }, ref) => {
+  ({ nodes, edges, onNodeClick, detailLevel, theme }, ref) => {
 
-    const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>(); // Tipado más específico
+    const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>();
 
     useImperativeHandle(ref, () => ({
-      get canvasEl() {
-        // Accedemos a la función del método que devuelve el elemento canvas
-        return fgRef.current?.canvasEl();
-      }
+      get canvasEl() { return fgRef.current?.canvasEl(); }
     }), []);
 
-    const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
-      nodes: [],
-      links: [],
-    });
+    const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({ nodes: [], links: [] });
 
     useEffect(() => {
       // Mapeo inicial, pero react-force-graph añadirá x, y, etc.
@@ -118,47 +115,53 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
       }
     };
     // --- FIN DE CORRECCIÓN ---
-
+    const linkColor = theme === 'light' ? '#475569' : '#64748b';
+    const backgroundColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
+    const nodeTextColor = theme === 'light' ? '#020617' : '#ffffff';
 
     return (
-      <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden">
-        <ForceGraph2D<GraphNode, GraphLink> // Añadir tipos genéricos
+      <div className="w-full h-full rounded-lg overflow-hidden">
+        <ForceGraph2D<GraphNode, GraphLink>
           ref={fgRef}
           graphData={graphData}
-          nodeLabel={(node) => `${node.label}${node.description ? '\n' + node.description : ''}`}
+          // --- Aplicar Nivel de Detalle (RF05) ---
+          nodeLabel={(node: GraphNode) =>
+            detailLevel === 'simple'
+              ? node.label // Modo simple: solo etiqueta
+              : `${node.label}${node.description ? `\n\n${node.description}` : ''}` // Modo detallado
+          }
           nodeColor={(node) => getNodeColor(node)}
-          nodeRelSize={6} // Este es el radio base, val puede modificarlo
+          nodeRelSize={6}
           linkLabel={(link) => link.label || link.relationship_type}
           linkDirectionalArrowLength={3.5}
           linkDirectionalArrowRelPos={1}
           linkCurvature={0.15}
-          linkColor={() => '#64748b'}
-          backgroundColor="#0f172a"
-          onNodeClick={handleNodeClickInternal} // <-- Usar la función interna corregida
+          // --- Aplicar Tema (RF05) ---
+          linkColor={() => linkColor}
+          backgroundColor={backgroundColor}
+          onNodeClick={handleNodeClickInternal}
 
-          // --- CORREGIDO: nodeCanvasObject con validación ---
           nodeCanvasObject={(node, ctx, globalScale) => {
             const label = node.label || 'NODO';
             const fontSize = 12 / globalScale;
             ctx.font = `${fontSize}px Sans-Serif`;
-            ctx.fillStyle = getNodeColor(node); // Usa la función helper
-
-            // Dibuja el círculo - ASEGURARSE que x, y son números
+            ctx.fillStyle = getNodeColor(node as GraphNode);
             const x = typeof node.x === 'number' ? node.x : 0;
             const y = typeof node.y === 'number' ? node.y : 0;
-            const radius = node.val / 2; // Usar node.val para el tamaño si se desea, o un valor fijo como 6
+            const radius = (node.val / 2) || 6;
 
             ctx.beginPath();
             ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
             ctx.fill();
 
-            // Dibuja la etiqueta debajo
+            // --- Aplicar Nivel de Detalle (RF05) ---
+            // Solo mostrar etiqueta si el nivel es 'simple' O si es 'detailed'
+            // (La descripción ya se muestra en el tooltip (nodeLabel))
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = nodeTextColor; // Aplicar color de texto del tema
             ctx.fillText(label, x, y + radius + 2);
           }}
-          // --- FIN DE CORRECCIÓN ---
         />
       </div>
     );
