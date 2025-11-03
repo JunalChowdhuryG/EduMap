@@ -69,7 +69,7 @@ def get_db():
         db.close()
 
 # Cliente Groq
-client = Groq(api_key="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")
+client = Groq(api_key="key")
 
 # --- MODIFICADO: SYSTEM_PROMPT ---
 # Añadida instrucción de color para jerarquía
