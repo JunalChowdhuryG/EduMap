@@ -42,7 +42,10 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
     const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>();
 
     useImperativeHandle(ref, () => ({
-      get canvasEl() { return fgRef.current?.canvasEl(); }
+      // --- INICIO DE LA CORRECCIÓN ---
+      // El error estaba aquí: Se quitaron los paréntesis de canvasEl()
+      get canvasEl() { return fgRef.current?.canvasEl; }
+      // --- FIN DE LA CORRECCIÓN ---
     }), []);
 
     const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({ nodes: [], links: [] });
@@ -69,29 +72,22 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
     }, [nodes, edges]);
 
 
-    // --- CORREGIDO: useEffect de Física ---
+    // useEffect de Física (sin cambios)
     useEffect(() => {
         const fg = fgRef.current;
-        // Solo ejecutar si fg está definido
         if (fg) {
           try {
-            // Asegurarse de que las fuerzas existan antes de configurarlas
             const chargeForce = fg.d3Force('charge');
             if (chargeForce) chargeForce.strength(-400);
-
-            const linkForce = fg.d3Force('link') as any; // Usar 'as any' si el tipo es complejo
+            const linkForce = fg.d3Force('link') as any;
             if (linkForce) linkForce.distance(100);
-
-            fg.d3Force('center'); // Esta usualmente no falla
+            fg.d3Force('center');
           } catch (error) {
               console.error("Error setting d3 forces:", error)
           }
-
-           // Re-calentar la simulación brevemente para aplicar cambios
            fg.d3ReheatSimulation();
         }
-      }, [graphData]); // <- Ejecutar cuando los datos cambien también
-      // --- FIN DE CORRECCIÓN ---
+      }, [graphData]);
 
 
     // getNodeColor (sin cambios)
@@ -105,16 +101,15 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
     };
 
 
-    // --- CORREGIDO: handleNodeClick (Pasar el objeto Node original) ---
+    // handleNodeClickInternal (sin cambios)
     const handleNodeClickInternal = (nodeInterno: GraphNode) => {
-      // Buscar el nodo original en `nodes` usando el id
       const nodoOriginal = nodes.find(n => n.id === nodeInterno.id);
       if (onNodeClick && nodoOriginal) {
-          // Devolvemos el nodo original que tiene toda la info de 'types.ts'
         onNodeClick(nodoOriginal);
       }
     };
-    // --- FIN DE CORRECCIÓN ---
+
+    // Variables de Tema (sin cambios)
     const linkColor = theme === 'light' ? '#475569' : '#64748b';
     const backgroundColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
     const nodeTextColor = theme === 'light' ? '#020617' : '#ffffff';
@@ -124,11 +119,10 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
         <ForceGraph2D<GraphNode, GraphLink>
           ref={fgRef}
           graphData={graphData}
-          // --- Aplicar Nivel de Detalle (RF05) ---
           nodeLabel={(node: GraphNode) =>
             detailLevel === 'simple'
-              ? node.label // Modo simple: solo etiqueta
-              : `${node.label}${node.description ? `\n\n${node.description}` : ''}` // Modo detallado
+              ? node.label
+              : `${node.label}${node.description ? `\n\n${node.description}` : ''}`
           }
           nodeColor={(node) => getNodeColor(node)}
           nodeRelSize={6}
@@ -136,7 +130,6 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
           linkDirectionalArrowLength={3.5}
           linkDirectionalArrowRelPos={1}
           linkCurvature={0.15}
-          // --- Aplicar Tema (RF05) ---
           linkColor={() => linkColor}
           backgroundColor={backgroundColor}
           onNodeClick={handleNodeClickInternal}
@@ -154,12 +147,9 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
             ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
             ctx.fill();
 
-            // --- Aplicar Nivel de Detalle (RF05) ---
-            // Solo mostrar etiqueta si el nivel es 'simple' O si es 'detailed'
-            // (La descripción ya se muestra en el tooltip (nodeLabel))
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillStyle = nodeTextColor; // Aplicar color de texto del tema
+            ctx.fillStyle = nodeTextColor;
             ctx.fillText(label, x, y + radius + 2);
           }}
         />
