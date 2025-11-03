@@ -7,8 +7,8 @@ import { NodeDetailModal } from './NodeDetailModal';
 import { SettingsModal } from './SettingsModal'; // <-- 1. Importar el nuevo modal
 import {
   Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload,
-  HelpCircle, BarChart2, Save, LogOut,
-  Settings // <-- 2. Importar el ícono de Ajustes
+  HelpCircle, BarChart2, Save, LogOut, Settings,
+  FileJson // <-- 2. Importar el ícono de Ajustes
 } from 'lucide-react';
 
 interface ModalNode extends NodeType {}
@@ -32,8 +32,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [inputText, setInputText] = useState('');
   const [actionType, setActionType] = useState<'create' | 'refine' | 'add_content' | 'focus'>('create');
-  
-  const [loading, setLoading] = useState(false); 
+  const [loading, setLoading] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [error, setError] = useState('');
   const [modalNode, setModalNode] = useState<ModalNode | null>(null);
@@ -239,6 +238,43 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     }
   };
 
+  const handleExportJSON = async () => {
+    if (!selectedGraph) {
+      setError("Por favor, selecciona un grafo para exportar.");
+      return;
+    }
+    setError('');
+    
+    try {
+      // Llama a la API de exportación de JSON que ya existe
+      const graphJsonData = await api.exportGraph(selectedGraph.id);
+      
+      // Crear un string JSON formateado
+      const jsonString = JSON.stringify(graphJsonData, null, 2);
+      
+      // Crear un objeto Blob para descargar
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      // Crear un enlace temporal para iniciar la descarga
+      const link = document.createElement('a');
+      link.href = url;
+      const fileName = `${selectedGraph.title?.replace(/[^a-z0-9]/gi, '_') || 'grafo'}.json`;
+      link.download = fileName;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpiar
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (err: any) {
+      console.error("Error al exportar JSON:", err);
+      setError(err.message || "No se pudo exportar el JSON.");
+    }
+  };
+
   const themeClass = preferences.theme === 'light' ? 'theme-light' : 'theme-dark';
 
   return (
@@ -249,13 +285,18 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
           <div className="flex items-center gap-4">
             <span className="text-sm text-theme-text-secondary hidden sm:inline">{userEmail}</span>
              <div className="flex items-center gap-1">
+                <button onClick={() => setShowSettingsModal(true)} title="Ajustes (RF05)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <Settings size={20} /> </button>
+                
+                {/* --- 3. Añadir el nuevo botón de Exportar JSON --- */}
                 <button
-                  onClick={() => setShowSettingsModal(true)}
-                  title="Ajustes de Personalización (RF05)"
-                  className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"
+                  onClick={handleExportJSON}
+                  title="Exportar como JSON (RF08)"
+                  disabled={!selectedGraph || graphData.nodes.length === 0}
+                  className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"
                 >
-                  <Settings size={20} />
+                  <FileJson size={20} />
                 </button>
+                {/* --- Fin del nuevo botón --- */}
 
                 <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
                 <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <HelpCircle size={20} /> </button>
@@ -272,7 +313,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
 
       <div className="max-w-7xl mx-auto px-4 py-6 text-theme-text-primary">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-180px)]">
-           <div className="lg-col-span-1 space-y-4 overflow-auto">
+           <div className="lg:col-span-1 space-y-4 overflow-auto">
              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <h2 className="text-lg font-semibold mb-4">Grafos de esta Sesión</h2>
                  {loading && graphs.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
@@ -300,11 +341,12 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
 
             {/* --- INICIO DEL BLOQUE CORREGIDO --- */}
            <div className="lg:col-span-3 flex flex-col gap-4">
+              {/* Este es el bloque que faltaba */}
               <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Escribe texto, una instrucción..."
+                  placeholder="Escribe texto, una instrucción (ej: 'Refinar sobre...') o sube un archivo para empezar."
                   className="w-full h-32 px-4 py-3 bg-theme-input-bg border border-theme-border rounded-lg text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
                 {error && (<div className="mt-2 text-sm text-red-400">{error}</div>)}
@@ -316,6 +358,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                   {loading ? (<><Loader2 size={20} className="animate-spin" /> Generando...</>) : (<><Sparkles size={20} /> Generar / Modificar Grafo</>)}
                 </button>
               </div>
+              {/* Fin del bloque que faltaba */}
 
                 <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-hidden">
                     {loading && <div className="flex items-center justify-center h-full text-theme-text-secondary"><Loader2 className="animate-spin mr-2"/> Cargando...</div>}
@@ -341,10 +384,12 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                     )}
                 </div>
            </div>
+           {/* --- FIN DEL BLOQUE CORREGIDO --- */}
+
         </div>
       </div>
 
-      {/* --- 9. Renderizar el Modal de Ajustes --- */}
+       {/* --- 9. Renderizar el Modal de Ajustes --- */}
        {showSettingsModal && (
         <SettingsModal
           currentPreferences={preferences}

@@ -4,14 +4,12 @@ import { X, Save, User, Palette, BarChartHorizontal } from 'lucide-react';
 import { Preferences } from '../lib/types';
 
 interface SettingsModalProps {
-  // Usamos Partial<Preferences> para manejar el estado inicial por defecto
   currentPreferences: Partial<Preferences>;
   onClose: () => void;
   onSave: (newPreferences: Preferences) => void;
   isLoading: boolean;
 }
 
-// Definimos los valores por defecto completos
 const defaultPreferences: Preferences = {
   theme: 'dark',
   detail_level: 'detailed',
@@ -25,7 +23,6 @@ export function SettingsModal({
   isLoading,
 }: SettingsModalProps) {
   
-  // Fusionamos los defaults con lo guardado para asegurar que todos los campos existan
   const initialPrefs = { ...defaultPreferences, ...currentPreferences };
 
   const [theme, setTheme] = useState(initialPrefs.theme);
@@ -49,7 +46,6 @@ export function SettingsModal({
         className="bg-slate-800 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col border border-slate-700"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Cabecera */}
         <div className="sticky top-0 bg-slate-900 px-6 py-4 flex justify-between items-center border-b border-slate-700">
           <h3 className="text-xl font-bold text-white">Ajustes de Personalización (RF05)</h3>
           <button
@@ -60,17 +56,15 @@ export function SettingsModal({
           </button>
         </div>
 
-        {/* Cuerpo */}
         <div className="p-6 space-y-6 overflow-y-auto">
           
-          {/* 1. User Persona */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-400 uppercase flex items-center gap-2">
               <User size={16} />
-              Tu Perfil
+              Tu Perfil (User Persona)
             </label>
             <p className="text-sm text-slate-400">
-              Selecciona tu perfil para adaptar la ayuda y las sugerencias (CU-04).
+              Adapta la ayuda y sugerencias a tu rol (CU-04).
             </p>
             <select
               value={personaType}
@@ -83,7 +77,6 @@ export function SettingsModal({
             </select>
           </div>
 
-          {/* 2. Tema Visual */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-400 uppercase flex items-center gap-2">
               <Palette size={16} />
@@ -106,15 +99,11 @@ export function SettingsModal({
             </div>
           </div>
 
-          {/* 3. Nivel de Detalle */}
            <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-400 uppercase flex items-center gap-2">
               <BarChartHorizontal size={16} />
-              Nivel de Detalle
+              Nivel de Detalle del Grafo
             </label>
-            <p className="text-sm text-slate-400">
-              Elige cuánto detalle mostrar por defecto en los grafos.
-            </p>
             <select
               value={detailLevel}
               onChange={(e) => setDetailLevel(e.target.value as Preferences['detail_level'])}
@@ -127,7 +116,6 @@ export function SettingsModal({
 
         </div>
 
-        {/* Pie de página */}
         <div className="sticky bottom-0 bg-slate-900 px-6 py-4 flex justify-end gap-3 border-t border-slate-700">
           <button
             onClick={onClose}

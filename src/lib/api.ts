@@ -1,5 +1,5 @@
 // src/lib/api.ts
-import { GraphSummary, GraphData, Preferences} from './types';
+import { GraphSummary, GraphData, Preferences } from './types'; // Importar Preferences
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -15,9 +15,8 @@ async function fetchApi(endpoint: string, options: RequestInit = {}) {
   return response.json();
 }
 
-// --- CORREGIDO: createUser ---
+// --- createUser (Corregido) ---
 export const createUser = (requestData: { user_id?: string } = {}): Promise<{ user_id: string }> => {
-  // El body debe ser el objeto directamente, no anidado.
   return fetchApi('/create_user', {
     method: 'POST',
     body: JSON.stringify(requestData),
@@ -29,7 +28,7 @@ export const getGraphHistory = (user_id: string): Promise<{ graphs: GraphSummary
   return fetchApi(`/graph_history/${user_id}`);
 };
 
-// --- CORREGIDO: getGraph ---
+// --- getGraph (Corregido) ---
 export const getGraph = (graph_id: string): Promise<{ graph: GraphData }> => {
    if (!graph_id) return Promise.reject("Graph ID es requerido");
   return fetchApi(`/get_graph/${graph_id}`);
@@ -103,14 +102,28 @@ export const addComment = (graph_id: string, node_id: string, text: string, user
   });
 };
 
+// --- AÑADIR/ACTUALIZAR ESTAS FUNCIONES ---
 
+/**
+ * (RF08) Llama al backend para obtener el JSON de un grafo.
+ */
+export const exportGraph = (graph_id: string): Promise<GraphData> => {
+  return fetchApi('/export_graph', {
+    method: 'POST',
+    body: JSON.stringify({ graph_id, format: 'json' }),
+  });
+};
+
+/**
+ * (RF05) Obtiene las preferencias guardadas de un usuario.
+ */
 export const getPreferences = (user_id: string): Promise<{ preferences: Partial<Preferences> }> => {
   if (!user_id) return Promise.resolve({ preferences: {} });
   return fetchApi(`/get_preferences/${user_id}`);
 };
 
 /**
- * Guarda/Actualiza las preferencias de un usuario.
+ * (RF05) Guarda/Actualiza las preferencias de un usuario.
  */
 export const updatePreferences = (user_id: string, content: Preferences): Promise<{ preferences: Preferences }> => {
   return fetchApi('/update_preferences', {
