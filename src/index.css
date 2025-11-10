@@ -1,3 +1,72 @@
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* --- AÑADIR ESTAS CLASES DE TEMA (RF05) --- */
+
+/* Tema Oscuro (Default) */
+.theme-dark {
+  --theme-bg-gradient-from: #0f172a;
+  --theme-bg-gradient-via: #1e293b;
+  --theme-bg-gradient-to: #0f172a;
+  --theme-header-bg: #0f172a;
+  --theme-secondary-bg: #1e293b;
+  --theme-input-bg: #334155;
+  --theme-border: #334155;
+  --theme-hover: #334155;
+  --theme-text-primary: #f1f5f9;
+  --theme-text-secondary: #94a3b8;
+  --theme-icon: #94a3b8;
+}
+
+/* Tema Claro */
+.theme-light {
+  --theme-bg-gradient-from: #f1f5f9;
+  --theme-bg-gradient-via: #f8fafc;
+  --theme-bg-gradient-to: #f1f5f9;
+  --theme-header-bg: #ffffff;
+  --theme-secondary-bg: #ffffff;
+  --theme-input-bg: #f1f5f9;
+  --theme-border: #e2e8f0;
+  --theme-hover: #f1f5f9;
+  --theme-text-primary: #0f172a;
+  --theme-text-secondary: #64748b;
+  --theme-icon: #475569;
+}
+
+/* Tema Ocean */
+.theme-ocean {
+  --theme-bg-gradient-from: #0c4a6e;
+  --theme-bg-gradient-via: #075985;
+  --theme-bg-gradient-to: #0c4a6e;
+  --theme-header-bg: #0369a1;
+  --theme-secondary-bg: #075985;
+  --theme-input-bg: #0c4a6e;
+  --theme-border: #0ea5e9;
+  --theme-hover: #0369a1;
+  --theme-text-primary: #f0f9ff;
+  --theme-text-secondary: #bae6fd;
+  --theme-icon: #e0f2fe;
+}
+
+/* Aplicar variables CSS */
+.bg-theme-header-bg { background-color: var(--theme-header-bg); }
+.bg-theme-secondary-bg { background-color: var(--theme-secondary-bg); }
+.bg-theme-input-bg { background-color: var(--theme-input-bg); }
+.border-theme-border { border-color: var(--theme-border); }
+.hover\:bg-theme-hover:hover { background-color: var(--theme-hover); }
+.text-theme-text-primary { color: var(--theme-text-primary); }
+.text-theme-text-secondary { color: var(--theme-text-secondary); }
+.text-theme-icon { color: var(--theme-icon); }
+.placeholder-theme-text-secondary::placeholder { color: var(--theme-text-secondary); }
+
+.bg-gradient-to-br.theme-dark {
+  background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
+}
+.bg-gradient-to-br.theme-light {
+  background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
+}
+.bg-gradient-to-br.theme-ocean {
+  background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
+}

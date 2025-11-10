@@ -1,7 +1,11 @@
 // src/components/GraphVisualization.tsx
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import ForceGraph2D, { ForceGraphMethods, LinkObject } from 'react-force-graph-2d';
-import { Node, Edge } from '../lib/types';
+import ForceGraph2D, {
+  ForceGraphMethods,
+  NodeObject,
+  LinkObject
+} from 'react-force-graph-2d';
+import { Node, Edge, Preferences } from '../lib/types';
 
 interface GraphNode {
   id: string;
@@ -11,14 +15,13 @@ interface GraphNode {
   color?: string;
   val: number;
   comments?: any[];
-  // Necesitamos asegurar que x, y estén presentes para nodeCanvasObject
   x?: number;
   y?: number;
 }
 
 interface GraphLink {
-  source: string | GraphNode; // Puede ser ID o el objeto nodo
-  target: string | GraphNode; // Puede ser ID o el objeto nodo
+  source: string | GraphNode;
+  target: string | GraphNode;
   label?: string;
   relationship_type: string;
 }
@@ -26,139 +29,147 @@ interface GraphLink {
 interface GraphVisualizationProps {
   nodes: Node[];
   edges: Edge[];
-  onNodeClick?: (node: Node) => void; // Cambiado para devolver el tipo Node original
+  onNodeClick?: (node: Node) => void;
+  detailLevel: Preferences['detail_level'];
+  theme: Preferences['theme'];
 }
 
 export interface GraphVisualizationHandle {
-  canvasEl: HTMLCanvasElement | undefined;
+  exportToPNG: (scale?: number) => void;
 }
 
 export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisualizationProps>(
-  ({ nodes, edges, onNodeClick }, ref) => {
+  ({ nodes, edges, onNodeClick, detailLevel, theme }, ref) => {
+    const fgRef = useRef<
+      ForceGraphMethods<NodeObject<GraphNode>, LinkObject<GraphNode, GraphLink>> | undefined
+    >(undefined);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({ nodes: [], links: [] });
 
-    const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>(); // Tipado más específico
-
-    useImperativeHandle(ref, () => ({
-      get canvasEl() {
-        // Accedemos a la función del método que devuelve el elemento canvas
-        return fgRef.current?.canvasEl();
+    const exportToPNG = (scale = 2) => {
+      const canvas = containerRef.current?.querySelector('canvas');
+      if (!canvas) {
+        alert('Canvas no encontrado. Espera a que el grafo se renderice.');
+        return;
       }
-    }), []);
 
-    const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
-      nodes: [],
-      links: [],
-    });
+      const width = canvas.width;
+      const height = canvas.height;
 
+      const tmp = document.createElement('canvas');
+      tmp.width = width * scale;
+      tmp.height = height * scale;
+      const ctx = tmp.getContext('2d');
+      if (!ctx) return;
+
+      // Fondo (opcional)
+      ctx.fillStyle = theme === 'light' ? '#ffffff' : '#0f172a';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+
+      // Dibuja el contenido escalado
+      ctx.drawImage(canvas, 0, 0, tmp.width, tmp.height);
+
+      // Exportar
+      const dataUrl = tmp.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = 'grafo.png';
+      link.click();
+    };
+    useImperativeHandle(ref, () => ({
+      exportToPNG
+    }));
+
+    // Generar datos
     useEffect(() => {
-      // Mapeo inicial, pero react-force-graph añadirá x, y, etc.
       const graphNodes: GraphNode[] = nodes.map((node) => ({
         id: node.id,
         label: node.label,
-        description: node.description || undefined,
+        description: node.description,
         node_type: node.type,
         color: node.color,
-        val: 10, // Tamaño base del nodo
-        comments: node.comments || [],
-        // x, y serán añadidos por la librería
+        val: 10,
+        comments: node.comments || []
       }));
       const graphLinks: GraphLink[] = edges.map((edge) => ({
         source: edge.from,
         target: edge.to,
-        label: edge.label || undefined,
-        relationship_type: edge.label || 'related_to',
+        label: edge.label,
+        relationship_type: edge.label || 'related_to'
       }));
       setGraphData({ nodes: graphNodes, links: graphLinks });
     }, [nodes, edges]);
 
-
-    // --- CORREGIDO: useEffect de Física ---
+    // Ajustes físicos
     useEffect(() => {
-        const fg = fgRef.current;
-        // Solo ejecutar si fg está definido
-        if (fg) {
-          try {
-            // Asegurarse de que las fuerzas existan antes de configurarlas
-            const chargeForce = fg.d3Force('charge');
-            if (chargeForce) chargeForce.strength(-400);
-
-            const linkForce = fg.d3Force('link') as any; // Usar 'as any' si el tipo es complejo
-            if (linkForce) linkForce.distance(100);
-
-            fg.d3Force('center'); // Esta usualmente no falla
-          } catch (error) {
-              console.error("Error setting d3 forces:", error)
-          }
-
-           // Re-calentar la simulación brevemente para aplicar cambios
-           fg.d3ReheatSimulation();
-        }
-      }, [graphData]); // <- Ejecutar cuando los datos cambien también
-      // --- FIN DE CORRECCIÓN ---
-
-
-    // getNodeColor (sin cambios)
-     const getNodeColor = (node: GraphNode) => {
-      if (node.color) return node.color;
-      const colors: Record<string, string> = {
-        'concepto_principal': '#FFB347', 'concepto_secundario': '#77DD77',
-        'entidad': '#AEC6CF', 'detalle': '#B39EB5', 'other': '#6b7280',
-      };
-      return colors[node.node_type] || colors.other;
-    };
-
-
-    // --- CORREGIDO: handleNodeClick (Pasar el objeto Node original) ---
-    const handleNodeClickInternal = (nodeInterno: GraphNode) => {
-      // Buscar el nodo original en `nodes` usando el id
-      const nodoOriginal = nodes.find(n => n.id === nodeInterno.id);
-      if (onNodeClick && nodoOriginal) {
-          // Devolvemos el nodo original que tiene toda la info de 'types.ts'
-        onNodeClick(nodoOriginal);
+      const fg = fgRef.current;
+      if (!fg) return;
+      try {
+        const chargeForce = fg.d3Force('charge');
+        if (chargeForce) chargeForce.strength(-400);
+        const linkForce = fg.d3Force('link') as any;
+        if (linkForce) linkForce.distance(100);
+        fg.d3ReheatSimulation();
+      } catch (err) {
+        console.error('Error configurando fuerzas:', err);
       }
-    };
-    // --- FIN DE CORRECCIÓN ---
+    }, [graphData]);
 
+    const linkColor = theme === 'light' ? '#475569' : '#64748b';
+    const backgroundColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
+    const nodeTextColor = theme === 'light' ? '#020617' : '#ffffff';
+
+    const getNodeColor = (node: GraphNode) => {
+      const colors: Record<string, string> = {
+        concepto_principal: '#FFB347',
+        concepto_secundario: '#77DD77',
+        entidad: '#AEC6CF',
+        detalle: '#B39EB5',
+        other: '#6b7280'
+      };
+      return node.color || colors[node.node_type] || colors.other;
+    };
+
+    const handleNodeClickInternal = (nodeInterno: GraphNode) => {
+      const nodoOriginal = nodes.find((n) => n.id === nodeInterno.id);
+      if (onNodeClick && nodoOriginal) onNodeClick(nodoOriginal);
+    };
 
     return (
-      <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden">
-        <ForceGraph2D<GraphNode, GraphLink> // Añadir tipos genéricos
+      <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden">
+        <ForceGraph2D<GraphNode, GraphLink>
           ref={fgRef}
           graphData={graphData}
-          nodeLabel={(node) => `${node.label}${node.description ? '\n' + node.description : ''}`}
+          nodeLabel={(node) =>
+            detailLevel === 'simple'
+              ? node.label
+              : `${node.label}${node.description ? `\n\n${node.description}` : ''}`
+          }
           nodeColor={(node) => getNodeColor(node)}
-          nodeRelSize={6} // Este es el radio base, val puede modificarlo
+          nodeRelSize={6}
           linkLabel={(link) => link.label || link.relationship_type}
           linkDirectionalArrowLength={3.5}
           linkDirectionalArrowRelPos={1}
           linkCurvature={0.15}
-          linkColor={() => '#64748b'}
-          backgroundColor="#0f172a"
-          onNodeClick={handleNodeClickInternal} // <-- Usar la función interna corregida
-
-          // --- CORREGIDO: nodeCanvasObject con validación ---
+          linkColor={() => linkColor}
+          backgroundColor={backgroundColor}
+          onNodeClick={handleNodeClickInternal}
           nodeCanvasObject={(node, ctx, globalScale) => {
             const label = node.label || 'NODO';
             const fontSize = 12 / globalScale;
             ctx.font = `${fontSize}px Sans-Serif`;
-            ctx.fillStyle = getNodeColor(node); // Usa la función helper
-
-            // Dibuja el círculo - ASEGURARSE que x, y son números
-            const x = typeof node.x === 'number' ? node.x : 0;
-            const y = typeof node.y === 'number' ? node.y : 0;
-            const radius = node.val / 2; // Usar node.val para el tamaño si se desea, o un valor fijo como 6
-
+            ctx.fillStyle = getNodeColor(node);
+            const x = node.x ?? 0;
+            const y = node.y ?? 0;
+            const radius = node.val / 2 || 6;
             ctx.beginPath();
             ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
             ctx.fill();
-
-            // Dibuja la etiqueta debajo
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = nodeTextColor;
             ctx.fillText(label, x, y + radius + 2);
           }}
-          // --- FIN DE CORRECCIÓN ---
         />
       </div>
     );
