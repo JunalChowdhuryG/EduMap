@@ -122,6 +122,13 @@ export const getPreferences = (user_id: string): Promise<{ preferences: Partial<
   return fetchApi(`/get_preferences/${user_id}`);
 };
 
+export const deleteNode = (graph_id: string, node_id: string, user_id: string): Promise<{ graph: GraphData }> => {
+  return fetchApi('/delete_node', {
+    method: 'POST',
+    body: JSON.stringify({ graph_id, node_id, user_id }),
+  });
+};
+
 /**
  * (RF05) Guarda/Actualiza las preferencias de un usuario.
  */

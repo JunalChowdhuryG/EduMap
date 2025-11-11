@@ -1,4 +1,18 @@
 // src/lib/types.ts
+import { createClient } from '@supabase/supabase-js';
+
+// --- Exportar tipos aquí también es válido si quieres un solo módulo de 'datos' ---
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('¡Error! Faltan las variables VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en tu archivo .env');
+}
+
+// Exporta el cliente de Supabase que AuthContext necesita
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 
 // Interfaz para la lista de grafos (del historial)
 export interface GraphSummary {
