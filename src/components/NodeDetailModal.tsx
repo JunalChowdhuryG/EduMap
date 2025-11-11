@@ -1,13 +1,15 @@
 // src/components/NodeDetailModal.tsx
-import { useState } from 'react';
-import { X, Send, Loader2, ZoomIn } from 'lucide-react';
-import { Node } from '../lib/types'; // Importamos la interfaz Node principal
+import { useState, useEffect } from 'react';
+import { X, Send, Loader2, ZoomIn, Volume2, StopCircle, Trash2 } from 'lucide-react'; // Importar iconos de audio
+import { Node } from '../lib/types';
 
 interface NodeDetailModalProps {
   node: Node | null;
   onClose: () => void;
-  onExpandNode: (node: Node) => void; // <-- AÑADIDO (Req 2)
-  onAddComment: (text: string) => Promise<void>; // <-- AÑADIDO (Req 6)
+  onExpandNode: (node: Node) => void;
+  onAddComment: (text: string) => Promise<void>;
+  onDeleteNode: (node: Node) => Promise<void>;
+  isDeleting: boolean;
 }
 
 export function NodeDetailModal({
@@ -15,11 +17,43 @@ export function NodeDetailModal({
   onClose,
   onExpandNode,
   onAddComment,
+  onDeleteNode,
+  isDeleting
 }: NodeDetailModalProps) {
   const [commentText, setCommentText] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false); // <-- 1. Estado para audio
 
   if (!node) return null;
+
+  // --- 2. Lógica para reproducir audio ---
+  const handlePlayAudio = () => {
+    if (!node?.description || !window.speechSynthesis) return;
+
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+    } else {
+      const utterance = new SpeechSynthesisUtterance(node.description);
+      utterance.lang = 'es-ES'; // Definir idioma español
+      
+      utterance.onstart = () => setIsPlaying(true);
+      utterance.onend = () => setIsPlaying(false);
+      utterance.onerror = () => setIsPlaying(false);
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // --- 3. Limpieza al cerrar el modal ---
+  useEffect(() => {
+    // Asegurarse de detener el audio si el modal se cierra
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   const handleAddComment = async () => {
     if (!commentText.trim()) return;
@@ -46,17 +80,27 @@ export function NodeDetailModal({
         {/* Cabecera del Modal */}
         <div className="sticky top-0 bg-slate-900 px-6 py-4 flex justify-between items-center border-b border-slate-700">
           <h3 className="text-xl font-bold text-white">{node.label}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-slate-700 rounded-full transition-colors"
-          >
-            <X className="w-6 h-6 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onDeleteNode(node)}
+              disabled={isDeleting}
+              title="Eliminar este nodo"
+              className="p-1 hover:bg-red-900/50 rounded-full transition-colors text-red-500 hover:text-red-400"
+            >
+              {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-slate-700 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         {/* Cuerpo del Modal */}
         <div className="p-6 space-y-4 overflow-y-auto">
-          {/* --- AÑADIDO: Botón Expandir (Req 2 / RF03) --- */}
+          {/* Botón Expandir (RF03) */}
           <button
             onClick={() => onExpandNode(node)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
@@ -73,8 +117,8 @@ export function NodeDetailModal({
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium`}
               style={{
-                backgroundColor: node.color ? `${node.color}30` : '#3b82f630', // Fondo con opacidad
-                color: node.color || '#3b82f6', // Color del texto
+                backgroundColor: node.color ? `${node.color}30` : '#3b82f630',
+                color: node.color || '#3b82f6',
                 border: `1px solid ${node.color || '#3b82f6'}`,
               }}
             >
@@ -82,11 +126,27 @@ export function NodeDetailModal({
             </span>
           </div>
 
-          {/* Descripción */}
+          {/* Descripción con Botón de Play */}
           <div>
-            <h4 className="text-sm font-semibold text-slate-400 uppercase mb-2">
-              Descripción
-            </h4>
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="text-sm font-semibold text-slate-400 uppercase">
+                Descripción
+              </h4>
+              {/* --- 4. Botón de Play/Stop --- */}
+              {node.description && (
+                <button
+                  onClick={handlePlayAudio}
+                  title={isPlaying ? 'Detener' : 'Reproducir descripción'}
+                  className="p-1 hover:bg-slate-700 rounded-full transition-colors text-slate-400 hover:text-white"
+                >
+                  {isPlaying ? (
+                    <StopCircle className="w-5 h-5" />
+                  ) : (
+                    <Volume2 className="w-5 h-5" />
+                  )}
+                </button>
+              )}
+            </div>
             <p className="text-slate-300 leading-relaxed">
               {node.description || 'Sin descripción.'}
             </p>

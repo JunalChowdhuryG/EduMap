@@ -32,6 +32,7 @@ interface GraphVisualizationProps {
   onNodeClick?: (node: Node) => void;
   detailLevel: Preferences['detail_level'];
   theme: Preferences['theme'];
+  highlightNodeId: string | null;
 }
 
 export interface GraphVisualizationHandle {
@@ -39,7 +40,7 @@ export interface GraphVisualizationHandle {
 }
 
 export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisualizationProps>(
-  ({ nodes, edges, onNodeClick, detailLevel, theme }, ref) => {
+  ({ nodes, edges, onNodeClick, detailLevel, theme, highlightNodeId }, ref) => {
     const fgRef = useRef<
       ForceGraphMethods<NodeObject<GraphNode>, LinkObject<GraphNode, GraphLink>> | undefined
     >(undefined);
@@ -155,21 +156,37 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
           backgroundColor={backgroundColor}
           onNodeClick={handleNodeClickInternal}
           nodeCanvasObject={(node, ctx, globalScale) => {
-            const label = node.label || 'NODO';
-            const fontSize = 12 / globalScale;
-            ctx.font = `${fontSize}px Sans-Serif`;
+          const label = node.label || 'NODO';
+          const fontSize = 12 / globalScale;
+          ctx.font = `${fontSize}px Sans-Serif`;
+
+          const x = node.x ?? 0;
+          const y = node.y ?? 0;
+          const radius = node.val / 2 || 6;
+
+          // --- LÓGICA DE RESALTADO ---
+          if (node.id === highlightNodeId) {
+            // Dibuja un "brillo" exterior
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "rgba(255, 255, 0, 0.7)"; // Amarillo brillante
+            ctx.fillStyle = '#FFFF00'; // Relleno amarillo
+          } else {
             ctx.fillStyle = getNodeColor(node);
-            const x = node.x ?? 0;
-            const y = node.y ?? 0;
-            const radius = node.val / 2 || 6;
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
-            ctx.fill();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillStyle = nodeTextColor;
-            ctx.fillText(label, x, y + radius + 2);
-          }}
+          }
+          // --- FIN LÓGICA DE RESALTADO ---
+
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
+          ctx.fill();
+
+          // Resetear sombra para que el texto no brille
+          ctx.shadowBlur = 0;
+
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = nodeTextColor;
+          ctx.fillText(label, x, y + radius + 2);
+        }}
         />
       </div>
     );

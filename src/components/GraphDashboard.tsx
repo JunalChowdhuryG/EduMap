@@ -5,12 +5,14 @@ import { GraphSummary, GraphData, Node as NodeType, Preferences } from '../lib/t
 import { GraphVisualization, GraphVisualizationHandle } from './GraphVisualization';
 import { NodeDetailModal } from './NodeDetailModal';
 import { SettingsModal } from './SettingsModal'; // <-- 1. Importar el nuevo modal
+import { useGraphTour } from '../lib/useGraphTour';
+
 import {
   Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload,
   HelpCircle, BarChart2, Save, LogOut, Settings,
-  FileJson // <-- 2. Importar el ícono de Ajustes
+  FileJson,
+  Play, StopCircle // <-- AÑADIR 'Play' Y 'StopCircle'
 } from 'lucide-react';
-
 interface ModalNode extends NodeType {}
 
 interface GraphDashboardProps {
@@ -33,12 +35,16 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   const [inputText, setInputText] = useState('');
   const [actionType, setActionType] = useState<'create' | 'refine' | 'add_content' | 'focus'>('create');
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [error, setError] = useState('');
   const [modalNode, setModalNode] = useState<ModalNode | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
-
+  const { startTour, stopTour, isTouring, currentNodeId } = useGraphTour(
+    graphData.nodes,
+    graphData.edges
+  );
   const ws = useRef<WebSocket | null>(null);
   const graphRef = useRef<GraphVisualizationHandle>(null);
 
@@ -49,7 +55,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
       let id = sessionStorage.getItem('knowledge_graph_user_id');
       if (!id) {
         try {
-          const data = await api.createUser();
+          const data = await api.createUser(); // Llama a tu backend de FastAPI
           id = data.user_id;
           sessionStorage.setItem('knowledge_graph_user_id', id);
         } catch (err: any) {
@@ -98,12 +104,118 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   }, [user_id]);
 
   useEffect(() => {
+    // Función para conectar al WebSocket (RF06)
+    const connectWebSocket = (graphId: string) => {
+      // Cierra cualquier conexión existente
+      if (ws.current) {
+        ws.current.close();
+        console.log("Cerrando conexión WS anterior.");
+      }
+      
+      // Construye la URL del WS (asegúrate que coincida con tu backend)
+      // Si tu backend corre en 8000, la URL de WS es 'ws://'
+      const wsUrl = `ws://localhost:8000/ws/${graphId}`;
+      console.log(`Conectando a WebSocket: ${wsUrl}`);
+
+      ws.current = new WebSocket(wsUrl);
+
+      ws.current.onopen = () => {
+        console.log(`WebSocket conectado para el grafo: ${graphId}`);
+      };
+
+      // Listener para mensajes entrantes
+      ws.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Si el servidor envía una actualización, actualiza el grafo
+          if (data.type === 'update' && data.graph) {
+            console.log("Recibida actualización del grafo vía WebSocket!");
+            setGraphData(data.graph);
+            
+            // Si el modal está abierto y el nodo se actualizó (ej. comentario nuevo),
+            // actualiza el modal también.
+            setModalNode(prevNode => {
+              if (prevNode) {
+                const updatedNode = data.graph.nodes.find((n: NodeType) => n.id === prevNode.id);
+                return updatedNode || prevNode;
+              }
+              return null;
+            });
+          }
+        } catch (e) {
+          console.error("Error al procesar mensaje WS:", e);
+        }
+      };
+
+      ws.current.onerror = (err) => {
+        console.error("Error de WebSocket:", err);
+      };
+
+      ws.current.onclose = () => {
+        console.log(`WebSocket desconectado del grafo: ${graphId}`);
+      };
+    };
+
+  // Efecto para gestionar la conexión WebSocket
+  useEffect(() => {
+    if (!selectedGraph) {
+      return;
+    }
+
+    const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000')
+        .replace('http', 'ws'); // Cambia http por ws
+
+    ws.current = new WebSocket(`${wsUrl}/ws/${selectedGraph.id}`);
+
+    ws.current.onopen = () => {
+      console.log(`WebSocket conectado al grafo: ${selectedGraph.id}`);
+    };
+
+    // Escuchar actualizaciones de otros usuarios
+    ws.current.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'update' && data.graph) {
+        console.log("Recibida actualización del grafo vía WebSocket");
+        setGraphData(data.graph);
+
+        // Si el nodo modal está abierto, actualizarlo también
+        setModalNode(prevModalNode => {
+          if (!prevModalNode) return null;
+          const updatedNode = data.graph.nodes.find((n: NodeType) => n.id === prevModalNode.id);
+          return updatedNode || null; // Cierra el modal si el nodo fue eliminado
+        });
+      }
+    };
+
+    ws.current.onclose = () => {
+      console.log("WebSocket desconectado.");
+    };
+
+    ws.current.onerror = (err) => {
+      console.error("Error de WebSocket:", err);
+    };
+
+    // Limpieza al cambiar de grafo o desmontar
+    return () => {
+      ws.current?.close();
+    };
+  }, [selectedGraph]); // Se reconecta cada vez que seleccionas un grafo diferente
+
+
+
+
+
+    
+
     const loadGraphData = async (graphId: string) => {
       setLoading(true); setError('');
       try {
-        // La API ahora no necesita user_id para obtener un grafo
         const data = await api.getGraph(graphId);
         setGraphData(data.graph || { nodes: [], edges: [] });
+        
+        connectWebSocket(graphId);
+
       } catch (err: any) {
         setError(err.message || 'Error cargando datos del grafo');
       } finally { setLoading(false); }
@@ -112,6 +224,13 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     if (selectedGraph) {
       loadGraphData(selectedGraph.id);
     }
+    return () => {
+      if (ws.current) {
+        console.log("Cerrando conexión WS en cleanup.");
+        ws.current.close();
+        ws.current = null;
+      }
+    };
   }, [selectedGraph]);
 
   const handleGenerateGraph = async (
@@ -134,24 +253,25 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
           result = await api.generateGraph(textToUse, user_id, textToUse.substring(0, 100));
           const newGraphSummary = { id: result.graph_id, title: textToUse.substring(0, 100) };
           setGraphs(prevGraphs => [...prevGraphs, newGraphSummary]);
-          setSelectedGraph(newGraphSummary);
-          setGraphData(result.graph);
+          setSelectedGraph(newGraphSummary); // Esto disparará el useEffect de WS
+          setGraphData(result.graph); // Actualiza el estado local
           break;
          case 'refine':
           if (!currentGraphId) { setError('Selecciona un grafo para refinar'); return; }
           result = await api.refineGraph(textToUse, currentGraphId, user_id);
-          setGraphData(result.graph);
+          setGraphData(result.graph); // Actualiza el estado local
+          // El backend (API) notificará a otros clientes
           break;
         case 'add_content':
           if (!currentGraphId || !selectedGraph) { setError('Selecciona un grafo para añadir contenido'); return; }
           result = await api.generateGraph(textToUse, user_id, selectedGraph.title, currentGraphData);
-           setGraphData(result.graph);
+           setGraphData(result.graph); // Actualiza el estado local
            setGraphs(prev => prev.map(g => g.id === currentGraphId ? {...g, title: selectedGraph.title} : g));
           break;
         case 'focus':
           if (!currentGraphId || !currentGraphData) { setError('Selecciona un grafo para enfocar'); return; }
           result = await api.expandNode(textToUse, currentGraphId, user_id, currentGraphData);
-          setGraphData(result.graph);
+          setGraphData(result.graph); // Actualiza el estado local
            if (selectedGraph) {
               setGraphs(prev => prev.map(g => g.id === currentGraphId ? {...g, title: selectedGraph.title} : g));
            }
@@ -238,6 +358,42 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     }
   };
 
+  const handleDeleteNode = async (nodeToDelete: ModalNode) => {
+    if (!user_id || !selectedGraph) {
+      setError("Se requiere sesión y grafo para eliminar.");
+      return;
+    }
+    
+    // Advertencia de confirmación
+    const nodeOwnerId = (nodeToDelete as any).owner_id;
+    const isOwner = !nodeOwnerId || nodeOwnerId === user_id;
+    const confirmMessage = isOwner
+      ? `¿Estás seguro de que quieres eliminar el nodo "${nodeToDelete.label}"? Esta acción es irreversible.`
+      : `ADVERTENCIA: Estás intentando eliminar un nodo de otro usuario. ¿Estás seguro?`;
+
+    // NOTA: La lógica de confirmación real está en el backend, 
+    // pero podemos usar la lógica de advertencia aquí.
+    
+    if (!confirm(`¿Estás seguro de que quieres eliminar el nodo "${nodeToDelete.label}"?`)) {
+      return;
+    }
+
+    setDeleteLoading(true);
+    try {
+      // Llamamos al nuevo endpoint de la API
+      await api.deleteNode(selectedGraph.id, nodeToDelete.id, user_id);
+      
+      // El WebSocket debería actualizar el grafo, pero cerramos el modal por si acaso.
+      setModalNode(null);
+
+    } catch (err: any) {
+      // El backend devolverá un error 403 si no somos propietarios
+      setError("Error al eliminar: " + err.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleExportJSON = async () => {
     if (!selectedGraph) {
       setError("Por favor, selecciona un grafo para exportar.");
@@ -301,6 +457,14 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                 <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
                 <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <HelpCircle size={20} /> </button>
                 <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <BarChart2 size={20} /> </button>
+                <button
+                  onClick={() => (isTouring ? stopTour() : startTour())}
+                  title={isTouring ? "Detener Recorrido" : "Iniciar Recorrido Narrado"}
+                  disabled={!selectedGraph || graphData.nodes.length === 0}
+                  className={`p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 ${isTouring ? 'text-red-400' : ''}`}
+                >
+                  {isTouring ? <StopCircle size={20} /> : <Play size={20} />}
+                </button>
                 <label htmlFor="file-upload" title="Subir Archivo (.txt, .pdf, .mp3, etc.)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon cursor-pointer"> <Upload size={20} /> </label>
                 <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload}/>
              </div>
@@ -371,6 +535,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                             // --- 8. Pasar nivel de detalle (RF05) ---
                             detailLevel={preferences.detail_level}
                             theme={preferences.theme}
+                            highlightNodeId={currentNodeId}
                         />
                     ) : (
                        !loading && (
@@ -389,15 +554,6 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
         </div>
       </div>
 
-       {/* --- 9. Renderizar el Modal de Ajustes --- */}
-       {showSettingsModal && (
-        <SettingsModal
-          currentPreferences={preferences}
-          onClose={() => setShowSettingsModal(false)}
-          onSave={handleSaveSettings}
-          isLoading={settingsLoading}
-        />
-       )}
 
        {modalNode && (
         <NodeDetailModal
@@ -413,8 +569,18 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                  if (updatedNode) setModalNode(updatedNode);
             } catch (commentError: any) { setError("Error al añadir comentario: " + commentError.message); }
           }}
+          onDeleteNode={handleDeleteNode}
+          isDeleting={deleteLoading}
         />
       )}
+      {showSettingsModal && (
+        <SettingsModal
+          currentPreferences={preferences}
+          onClose={() => setShowSettingsModal(false)}
+          onSave={handleSaveSettings}
+          isLoading={settingsLoading}
+        />
+       )}
     </div>
   );
 }
