@@ -113,7 +113,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
         ws.current.close();
       }
       
-      const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000')
+      const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://192.168.0.9:8000')
           .replace('http', 'ws');
           
       console.log(`Conectando a WebSocket: ${wsUrl}/ws/${graphId}`);
