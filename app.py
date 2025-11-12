@@ -101,7 +101,7 @@ Cada nodo debe incluir:
 """
 
 app = FastAPI()
-origins = ["http://192.168.0.9:5173", "http://127.0.0.1:5173"]
+origins = ["http://10.60.0.156:5173", "http://127.0.0.1:5173"]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 collaborations: Dict[str, List[WebSocket]] = defaultdict(list)
 
@@ -315,10 +315,17 @@ async def export_graph(request: ExportRequest, db: Session = Depends(get_db)):
 
 @app.get("/graph_history/{user_id}")
 async def graph_history(user_id: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user: return {"graphs": []}
-    graphs_list = [{"id": g.id, "title": g.title} for g in user.graphs]
+    #user = db.query(User).filter(User.id == user_id).first()
+    #if not user: return {"graphs": []}
+    #graphs_list = [{"id": g.id, "title": g.title} for g in user.graphs]
+    #return {"graphs": graphs_list}
+
+    print(f"Usuario {user_id} solicitando historial de grafos (modo global).")
+    todos_los_grafos = db.query(Graph).order_by(Graph.title).all()
+    graphs_list = [{"id": g.id, "title": g.title} for g in todos_los_grafos]
     return {"graphs": graphs_list}
+
+
 
 @app.get("/get_graph/{graph_id}")
 async def get_graph(graph_id: str, db: Session = Depends(get_db)):
