@@ -73,6 +73,27 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    switch(preferences.persona_type) {
+      case 'estudiante':
+        setActionType('create'); // Los estudiantes usualmente empiezan creando
+        break;
+      case 'profesor':
+        setActionType('add_content'); // Los profesores añaden a un grafo existente
+        break;
+      case 'investigador':
+        setActionType('refine'); // Los investigadores refinan y analizan
+        break;
+    }
+  }, [preferences.persona_type]);
+
+
+
+
+
+
+
+
   // Efecto para cargar las preferencias
   useEffect(() => {
     const loadPreferences = async () => {
@@ -113,7 +134,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
         ws.current.close();
       }
       
-      const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.156:8000')
+      const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://10.10.0.130:8000')
           .replace('http', 'ws');
           
       console.log(`Conectando a WebSocket: ${wsUrl}/ws/${graphId}`);
@@ -346,35 +367,64 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   };
 
   const themeClass = preferences.theme === 'light' ? 'theme-light' : 'theme-dark';
-
+  const personaClass = `persona-${preferences.persona_type}`; // ej. 'persona-estudiante'
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${themeClass}`}>
+    <div className={`min-h-screen bg-gradient-to-br ${themeClass} ${personaClass}`}>
       <header className="border-b border-theme-border bg-theme-header-bg bg-opacity-50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-theme-text-primary">EduMap</h1>
+          
+          {/* Título con color de acento */}
+          <h1 className="text-2xl font-bold text-theme-accent">
+            EduMap
+            {/* Muestra el rol actual */}
+            <span className="text-sm font-normal text-theme-text-secondary ml-2 capitalize">
+              ({preferences.persona_type})
+            </span>
+          </h1>
+
           <div className="flex items-center gap-4">
             <span className="text-sm text-theme-text-secondary hidden sm:inline">{userEmail}</span>
              <div className="flex items-center gap-1">
+                
+                {/* --- 3. MODIFICADO: Barra de herramientas condicional --- */}
                 <button onClick={() => setShowSettingsModal(true)} title="Ajustes (RF05)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <Settings size={20} /> </button>
-                <button
-                  onClick={handleExportJSON}
-                  title="Exportar como JSON (RF08)"
-                  disabled={!selectedGraph || graphData.nodes.length === 0}
-                  className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"
-                >
-                  <FileJson size={20} />
-                </button>
-                <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
-                <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <HelpCircle size={20} /> </button>
-                <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <BarChart2 size={20} /> </button>
-                <button
-                  onClick={() => (isTouring ? stopTour() : startTour())}
-                  title={isTouring ? "Detener Recorrido" : "Iniciar Recorrido Narrado"}
-                  disabled={!selectedGraph || graphData.nodes.length === 0}
-                  className={`p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 ${isTouring ? 'text-red-400' : ''}`}
-                >
-                  {isTouring ? <StopCircle size={20} /> : <Play size={20} />}
-                </button>
+                
+                {/* Profesor e Investigador: Exportar */}
+                {(preferences.persona_type === 'profesor' || preferences.persona_type === 'investigador') && (
+                  <>
+                    <button
+                      onClick={handleExportJSON}
+                      title="Exportar como JSON (RF08)"
+                      disabled={!selectedGraph || graphData.nodes.length === 0}
+                      className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"
+                    >
+                      <FileJson size={20} />
+                    </button>
+                    <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
+                  </>
+                )}
+
+                {/* Estudiante y Profesor: Ayuda y Recorrido */}
+                {(preferences.persona_type === 'estudiante' || preferences.persona_type === 'profesor') && (
+                  <>
+                    <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <HelpCircle size={20} /> </button>
+                    <button
+                      onClick={() => (isTouring ? stopTour() : startTour())}
+                      title={isTouring ? "Detener Recorrido" : "Iniciar Recorrido Narrado"}
+                      disabled={!selectedGraph || graphData.nodes.length === 0}
+                      className={`p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 ${isTouring ? 'text-red-400' : ''}`}
+                    >
+                      {isTouring ? <StopCircle size={20} /> : <Play size={20} />}
+                    </button>
+                  </>
+                )}
+
+                {/* Investigador: Analizar Grafo */}
+                {preferences.persona_type === 'investigador' && (
+                  <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <BarChart2 size={20} /> </button>
+                )}
+
+                {/* Todos: Subir Archivo */}
                 <label htmlFor="file-upload" title="Subir Archivo (.txt, .pdf, .mp3, etc.)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon cursor-pointer"> <Upload size={20} /> </label>
                 <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload}/>
              </div>
@@ -390,12 +440,10 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
            <div className="lg:col-span-1 space-y-4 overflow-auto">
              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <h2 className="text-lg font-semibold mb-4">Grafos de esta Sesión</h2>
-                 {loading && graphs.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
-                 {!loading && graphs.length === 0 && !error && <p className="text-sm text-slate-500">Crea tu primer grafo.</p>}
-                 {error && <p className="text-sm text-red-400">{error}</p>}
+                {/* ... (lógica de lista de grafos sin cambios) ... */}
                 <div className="space-y-2 mt-2">
                     {graphs.map((graph) => (
-                    <button key={graph.id} onClick={() => setSelectedGraph(graph)} className={`w-full text-left p-3 rounded-lg transition-colors ${selectedGraph?.id === graph.id ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                    <button key={graph.id} onClick={() => setSelectedGraph(graph)} className={`w-full text-left p-3 rounded-lg transition-colors ${selectedGraph?.id === graph.id ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'}`}>
                         <div className="font-medium truncate">{graph.title || 'Grafo sin título'}</div>
                     </button>
                     ))}
@@ -404,28 +452,31 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
 
              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                    <h3 className="text-sm font-semibold mb-3">Tipo de Acción</h3>
+                   {/* --- 4. MODIFICADO: Usar color de acento en botones de acción --- */}
                    <div className="space-y-2">
-                      <button onClick={() => setActionType('create')} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'create' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}> <Plus size={16} /> Crear Nuevo </button>
-                      <button onClick={() => setActionType('add_content')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'add_content' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FileText size={16} /> Añadir Contenido </button>
-                      <button onClick={() => setActionType('refine')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'refine' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <RefreshCw size={16} /> Refinar (Feedback) </button>
-                      <button onClick={() => setActionType('focus')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'focus' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FocusIcon size={16} /> Enfocar Tópico </button>
+                      <button onClick={() => setActionType('create')} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'create' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'}`}> <Plus size={16} /> Crear Nuevo </button>
+                      <button onClick={() => setActionType('add_content')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'add_content' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FileText size={16} /> Añadir Contenido </button>
+                      <button onClick={() => setActionType('refine')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'refine' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <RefreshCw size={16} /> Refinar (Feedback) </button>
+                      <button onClick={() => setActionType('focus')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'focus' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FocusIcon size={16} /> Enfocar Tópico </button>
                    </div>
               </div>
            </div>
 
            <div className="lg:col-span-3 flex flex-col gap-4">
               <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
+                {/* ... (textarea sin cambios) ... */}
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="Escribe texto, una instrucción (ej: 'Refinar sobre...') o sube un archivo para empezar."
-                  className="w-full h-32 px-4 py-3 bg-theme-input-bg border border-theme-border rounded-lg text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full h-32 px-4 py-3 bg-theme-input-bg border border-theme-border rounded-lg text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:ring-2 ring-theme-accent resize-none"
                 />
                 {error && (<div className="mt-2 text-sm text-red-400">{error}</div>)}
+                {/* Botón principal con color de acento */}
                 <button
                   onClick={() => handleGenerateGraph(false)}
                   disabled={loading || !user_id}
-                  className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
+                  className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3 bg-theme-accent hover:bg-theme-accent-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
                 >
                   {loading ? (<><Loader2 size={20} className="animate-spin" /> Generando...</>) : (<><Sparkles size={20} /> Generar / Modificar Grafo</>)}
                 </button>

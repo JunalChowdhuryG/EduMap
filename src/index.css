@@ -3,8 +3,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- AÑADIR ESTAS CLASES DE TEMA (RF05) --- */
-
 /* Tema Oscuro (Default) */
 .theme-dark {
   --theme-bg-gradient-from: #0f172a;
@@ -18,6 +16,7 @@
   --theme-text-primary: #f1f5f9;
   --theme-text-secondary: #94a3b8;
   --theme-icon: #94a3b8;
+  --theme-accent: #2563eb; /* Azul por defecto */
 }
 
 /* Tema Claro */
@@ -33,6 +32,7 @@
   --theme-text-primary: #0f172a;
   --theme-text-secondary: #64748b;
   --theme-icon: #475569;
+  --theme-accent: #2563eb; /* Azul por defecto */
 }
 
 /* Tema Ocean */
@@ -48,7 +48,27 @@
   --theme-text-primary: #f0f9ff;
   --theme-text-secondary: #bae6fd;
   --theme-icon: #e0f2fe;
+  --theme-accent: #0ea5e9; /* Azul cian */
 }
+
+/* --- NUEVO: ESTILOS POR PERSONA --- */
+
+/* Estudiante (Verde) */
+.persona-estudiante {
+  --theme-accent: #16a34a; /* green-600 */
+}
+
+/* Profesor (Morado) */
+.persona-profesor {
+  --theme-accent: #7c3aed; /* violet-600 */
+}
+
+/* Investigador (Naranja) */
+.persona-investigador {
+  --theme-accent: #ea580c; /* orange-600 */
+}
+
+/* --- FIN DE NUEVOS ESTILOS --- */
 
 /* Aplicar variables CSS */
 .bg-theme-header-bg { background-color: var(--theme-header-bg); }
@@ -61,6 +81,18 @@
 .text-theme-icon { color: var(--theme-icon); }
 .placeholder-theme-text-secondary::placeholder { color: var(--theme-text-secondary); }
 
+/* --- NUEVO: Aplicar color de acento --- */
+.bg-theme-accent { background-color: var(--theme-accent); }
+.hover\:bg-theme-accent-hover:hover { 
+  background-color: var(--theme-accent);
+  filter: brightness(1.1);
+}
+.text-theme-accent { color: var(--theme-accent); }
+.ring-theme-accent {
+  --tw-ring-color: var(--theme-accent);
+}
+/* ------------------------------------- */
+
 .bg-gradient-to-br.theme-dark {
   background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
 }
@@ -69,4 +101,46 @@
 }
 .bg-gradient-to-br.theme-ocean {
   background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
+}
+
+
+
+
+
+
+
+
+
+
+
+/* src/index.css */
+/* ... (tus estilos de tema y persona) ... */
+
+/* --- Estilos de la Demo --- */
+.demo-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  backdrop-filter: blur(2px);
+}
+
+.demo-highlight {
+  position: relative;
+  z-index: 101;
+  /* Un resplandor para destacarlo */
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.7), 0 0 20px 10px rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  transition: all 0.3s ease-in-out;
+}
+
+.demo-popup {
+  position: fixed; /* Cambiado a 'fixed' para un posicionamiento más simple */
+  z-index: 102;
+  background-color: #f1f5f9; /* Fondo claro */
+  color: #1e293b; /* Texto oscuro */
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  max-width: 300px;
 }
