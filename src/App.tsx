@@ -1,18 +1,29 @@
 // src/App.tsx
+import { useState } from 'react';
 import { GraphDashboard } from './components/GraphDashboard';
-import { Auth } from './components/Auth'; // <-- Importa Auth real
-import { useAuth } from './contexts/AuthContext'; // <-- Importa el hook
+import { Login } from './components/Login'; // Importar el componente de login simple
 
 function App() {
-  const { user, signOut } = useAuth(); // <-- Usa el contexto
+  // Estado para guardar el email del usuario (simulado)
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  return user ? (
-    <GraphDashboard 
-      userEmail={user.email || 'Usuario'} 
-      onLogout={signOut} 
-    />
+  // Función que se pasará a Login para actualizar el estado
+  const handleLogin = (email: string) => {
+    setUserEmail(email);
+  };
+
+  // Función para simular el logout
+  const handleLogout = () => {
+    setUserEmail(null);
+    // Limpiar el user_id temporal al salir
+    sessionStorage.removeItem('knowledge_graph_user_id');
+  };
+
+  // Renderiza Login o GraphDashboard basado en si hay un email
+  return userEmail ? (
+    <GraphDashboard userEmail={userEmail} onLogout={handleLogout} />
   ) : (
-    <Auth /> // <-- Usa el componente Auth real
+    <Login onLogin={handleLogin} />
   );
 }
 
