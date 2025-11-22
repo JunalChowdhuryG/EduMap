@@ -18,12 +18,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 import networkx as nx
 
-# --- 1. NUEVA CONFIGURACIÓN DE BASE DE DATOS ---
 # Usamos un nuevo nombre de archivo para la base de datos relacional.
 DATABASE_URL = "sqlite:///./knowledge_graphs_relational.db"
 DB_FILE = "./knowledge_graphs_relational.db"
 
-# ¡Importante! Elimina tu antigua base de datos .db si existe
+# Elimina tu antigua base de datos .db si existe
 OLD_DB_FILE = "./knowledge_graphs_session.db"
 if os.path.exists(OLD_DB_FILE):
     print(f"Eliminando base de datos antigua (formato JSON): {OLD_DB_FILE}")
@@ -43,7 +42,6 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# --- 2. NUEVOS MODELOS DE BASE DE DATOS (ARQUITECTURA RELACIONAL) ---
 
 # La tabla de Usuarios se mantiene igual
 class User(Base):
@@ -63,7 +61,6 @@ class Preference(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     user = relationship("User", back_populates="preferences")
 
-# NUEVA TABLA: KnowledgeGraph (reemplaza la antigua 'Graph')
 # Esta tabla solo guarda el título y la relación con el usuario.
 class KnowledgeGraph(Base):
     __tablename__ = "knowledge_graphs"
@@ -76,7 +73,7 @@ class KnowledgeGraph(Base):
     nodes = relationship("GraphNode", back_populates="graph", cascade="all, delete-orphan")
     edges = relationship("GraphEdge", back_populates="graph", cascade="all, delete-orphan")
 
-# NUEVA TABLA: GraphNode
+# graphNode
 class GraphNode(Base):
     __tablename__ = "graph_nodes"
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
@@ -130,10 +127,10 @@ def get_db():
     finally:
         db.close()
 
-# Cliente Groq (sin cambios)
+# Cliente Groq
 client = Groq(api_key=os.environ.get("GROQ_API_KEY", "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"))
 
-# SYSTEM_PROMPT (sin cambios respecto al último)
+# SYSTEM_PROMPT 
 SYSTEM_PROMPT = """
 Eres un generador de mapas de conocimiento para materiales educativos. Tu tarea es crear, refinar o expandir un grafo basado en el texto proporcionado por el usuario.
 
@@ -169,12 +166,11 @@ Responde ÚNICAMENTE con un objeto JSON válido en el siguiente formato, sin tex
 """
 
 app = FastAPI()
-# Configuración de CORS y WebSocket (sin cambios)
-origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://10.10.0.130:5173"] # Añadida IP de ejemplo
+origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://10.60.0.223:5173"] # Añadida IP de ejemplo
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 collaborations: Dict[str, List[WebSocket]] = defaultdict(list)
 
-# Clases Pydantic (sin cambios)
+# Clases Pydantic 
 class GraphRequest(BaseModel): message: str; previous_graph: Optional[Dict] = None; graph_id: Optional[str] = None; title: Optional[str] = None; user_id: str
 class FeedbackRequest(BaseModel): feedback: str; graph_id: str; user_id: str
 class ExportRequest(BaseModel): graph_id: str; format: str
@@ -183,9 +179,8 @@ class PreferenceRequest(BaseModel): content: Dict; user_id: str
 class CommentRequest(BaseModel): graph_id: str; node_id: str; text: str; user_id: str
 class DeleteNodeRequest(BaseModel): graph_id: str; node_id: str; user_id: str
 
-# --- ENDPOINTS ACTUALIZADOS ---
 
-# /create_user (Sin cambios, ya usa la nueva tabla User)
+# /create_user
 @app.post("/create_user")
 async def create_user(request: UserRequest, db: Session = Depends(get_db)):
     user_id = request.user_id
@@ -197,10 +192,10 @@ async def create_user(request: UserRequest, db: Session = Depends(get_db)):
         db.add(new_user); db.commit(); db.refresh(new_user)
         return {"user_id": new_user.id}
 
-# /upload (Sin cambios)
+# /upload 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    # ... (código sin cambios) ...
+    
     try:
         if file.filename.endswith('.pdf'):
             pdf_reader = PyPDF2.PdfReader(file.file); text = "".join(page.extract_text() + "\n" for page in pdf_reader.pages)
@@ -212,13 +207,13 @@ async def upload_file(file: UploadFile = File(...)):
             with sr.AudioFile(file.file) as source: audio = r.record(source)
             text = r.recognize_google(audio, language="es-ES")
             return {"extracted_text": text, "notification": None}
-        elif file.filename.endswith(('.png', '.jpg', '.jpeg')):
+        elif file.filename.endswith(('.-', '.jpg', '.jpeg')):
             image = Image.open(file.file); text = pytesseract.image_to_string(image, lang='spa')
             return {"extracted_text": text, "notification": None}
         else: raise HTTPException(status_code=400, detail="Tipo de archivo no soportado")
     except Exception as e: return {"extracted_text": None, "notification": f"Error procesando archivo: {str(e)}"}
 
-# --- FUNCIÓN AUXILIAR PARA ENSAMBLAR GRAFOS ---
+# 
 # Esta función lee las tablas de la DB y crea el JSON que espera el frontend
 def assemble_graph_json(graph_id: str, db: Session) -> Dict:
     nodes_db = db.query(GraphNode).filter(GraphNode.graph_id == graph_id).all()
@@ -279,7 +274,7 @@ async def generate_graph(request: GraphRequest, db: Session = Depends(get_db)):
         db.refresh(graph)
         graph_id = graph.id
 
-    # 1. Preparar y llamar a Groq (sin cambios)
+    # 1. Preparar y llamar a Groq 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if request.previous_graph:
         user_content = f"Grafo Anterior: {json.dumps(request.previous_graph)}\n\nInstrucción del Usuario: {request.message}"
@@ -380,7 +375,7 @@ async def generate_graph(request: GraphRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error al generar/guardar grafo: {str(e)}")
 
 
-# --- 5. ENDPOINT /delete_node ACTUALIZADO (Ahora es mucho más simple) ---
+# --- 5. ENDPOINT /delete_node ACTUALIZADO 
 @app.post("/delete_node")
 async def delete_node(request: DeleteNodeRequest, db: Session = Depends(get_db)):
     
@@ -416,7 +411,6 @@ async def delete_node(request: DeleteNodeRequest, db: Session = Depends(get_db))
 
 
 # --- 6. ENDPOINTS /expand_node y /refine_graph ACTUALIZADOS ---
-# (Usan la lógica de `generate_graph` pero necesitan ensamblar el `previous_graph` primero)
 
 async def get_previous_graph_json(graph_id: str, db: Session) -> Optional[Dict]:
     graph = db.query(KnowledgeGraph).filter(KnowledgeGraph.id == graph_id).first()
@@ -537,7 +531,7 @@ async def broadcast_update(graph_id: str, graph_data: Dict, exclude_sender: Opti
             try: await connection.send_text(message)
             except Exception as e: print(f"Error sending broadcast: {e}")
 
-# Endpoints de /analyze_graph, /contextual_help, /export_graph, /get_preferences, /update_preferences (sin cambios funcionales, solo usan nuevos modelos)
+# Endpoints de /analyze_graph, /contextual_help, /export_graph, /get_preferences, /update_preferences 
 
 @app.post("/export_graph")
 async def export_graph(request: ExportRequest, db: Session = Depends(get_db)):
