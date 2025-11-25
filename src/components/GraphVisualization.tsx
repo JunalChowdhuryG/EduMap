@@ -15,7 +15,7 @@ interface GraphNode {
   node_type: string;
   color?: string;
   val: number;
-  comments?: any[];
+  comments?: unknown[];
   x?: number;
   y?: number;
 }
@@ -126,8 +126,7 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
       try {
         const chargeForce = fg.d3Force('charge');
         if (chargeForce) chargeForce.strength(-400);
-        const linkForce = fg.d3Force('link') as any;
-        if (linkForce) linkForce.distance(100);
+  // link force distance left default; if needed we can refine with d3 types
         fg.d3ReheatSimulation();
       } catch (err) {
         console.error('Error configurando fuerzas:', err);
@@ -136,20 +135,22 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
 
     // Re-ajustar vista cuando los datos cambian
     useEffect(() => {
-      const fg = fgRef.current as any;
+      const fg = fgRef.current;
       if (!fg) return;
       // esperar un tick para dejar que la simulación arranque y luego ajustar vista
       const t = setTimeout(() => {
         try {
           if (fg.zoomToFit) fg.zoomToFit(400, 40);
-        } catch (e) {}
+        } catch (err) {
+          // no crítico: fallo al centrar/ajustar vista
+          console.debug('zoomToFit failed', err);
+        }
       }, 200);
       return () => clearTimeout(t);
     }, [graphData, size]);
 
-    const linkColor = theme === 'light' ? '#475569' : '#64748b';
-    const backgroundColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
-    const nodeTextColor = theme === 'light' ? '#020617' : '#ffffff';
+  const linkColor = theme === 'light' ? '#475569' : '#64748b';
+  const backgroundColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
 
     const getNodeColor = (node: GraphNode) => {
       const colors: Record<string, string> = {
@@ -176,20 +177,12 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
           height={size.height}
           // prevenir zoom extremo / asegurar encaje en contenedor
           onEngineStop={() => {
-            const fg = fgRef.current as any;
+            const fg = fgRef.current;
             try {
-              // limitar zoom si d3-zoom está expuesto (no rompe si no existe)
-              if (fg?.d3Zoom) {
-                const z = fg.d3Zoom();
-                if (z?.scaleExtent) z.scaleExtent([0.6, 2]);
-              // limitar pan para que no se pierda el grafo fuera del área
-               if (z?.translateExtent) z.translateExtent([[ -size.width, -size.height ], [ size.width * 2, size.height * 2 ]]);
-              }
               // centrar y ajustar al tamaño del contenedor
               if (fg?.zoomToFit) fg.zoomToFit(400, 40);
-            } catch (e) {
+            } catch {
               // no crítico
-              // console.warn('No se pudo limitar zoom/ajustar vista:', e);
             }
           }}
           // opcional: cuando cambian datos, re-ajustar vista
@@ -211,37 +204,81 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
           backgroundColor={backgroundColor}
           onNodeClick={handleNodeClickInternal}
           nodeCanvasObject={(node, ctx, globalScale) => {
-          const label = node.label || 'NODO';
-          const fontSize = 12 / globalScale;
-          ctx.font = `${fontSize}px Sans-Serif`;
+            // guardar/restaurar contexto para no afectar dibujados externos
+            ctx.save();
 
-          const x = node.x ?? 0;
-          const y = node.y ?? 0;
-          const radius = node.val / 2 || 6;
+            const label = node.label || 'NODO';
+            // fuente responsiva al zoom, con tamaño mínimo para legibilidad
+            const fontSize = Math.max(10, Math.floor(12 / Math.max(0.5, globalScale)));
+            ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
 
-          // --- LÓGICA DE RESALTADO ---
-          if (node.id === highlightNodeId) {
-            // Dibuja un "brillo" exterior
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "rgba(255, 255, 0, 0.7)"; // Amarillo brillante
-            ctx.fillStyle = '#FFFF00'; // Relleno amarillo
-          } else {
-            ctx.fillStyle = getNodeColor(node);
-          }
-          // --- FIN LÓGICA DE RESALTADO ---
+            const x = node.x ?? 0;
+            const y = node.y ?? 0;
+            const radius = Math.max(4, (node.val ?? 6) / 2);
 
-          ctx.beginPath();
-          ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
-          ctx.fill();
+            // Dibuja el nodo (círculo) primero
+            if (node.id === highlightNodeId) {
+              ctx.shadowBlur = 18;
+              ctx.shadowColor = 'rgba(255,200,50,0.8)';
+              ctx.fillStyle = '#FFEB99';
+            } else {
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = getNodeColor(node);
+            }
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
+            ctx.fill();
 
-          // Resetear sombra para que el texto no brille
-          ctx.shadowBlur = 0;
+            // Texto y fondo (píldora) debajo del texto, localizado justo debajo del nodo
+            ctx.shadowBlur = 0;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
 
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'top';
-          ctx.fillStyle = nodeTextColor;
-          ctx.fillText(label, x, y + radius + 2);
-        }}
+            // ancho máximo para la etiqueta (proporcional al canvas)
+            const maxLabelWidth = Math.min(size.width * 0.7, 280);
+            const paddingX = 10;
+            const paddingY = 6;
+
+            // medir y truncar con elipsis si es necesario
+            let textToDraw = label;
+            let measured = ctx.measureText(textToDraw).width;
+            if (measured > maxLabelWidth) {
+              // truncar con bucle (suficientemente rápido para etiquetas cortas)
+              while (textToDraw.length > 0 && ctx.measureText(textToDraw + '…').width > maxLabelWidth) {
+                textToDraw = textToDraw.slice(0, -1);
+              }
+              textToDraw = textToDraw + '…';
+              measured = ctx.measureText(textToDraw).width;
+            }
+
+            const rectW = measured + paddingX * 2;
+            const rectH = fontSize + paddingY * 2;
+            const rectX = x - rectW / 2;
+            const rectY = y + radius + 8; // separación por debajo del nodo
+
+            // fondo de la etiqueta (alto contraste en modo light)
+            ctx.beginPath();
+            const radiusRound = 8;
+            // dibujar rectángulo redondeado
+            ctx.fillStyle = theme === 'light' ? 'rgba(255,255,255,0.92)' : 'rgba(6,8,23,0.6)';
+            ctx.strokeStyle = theme === 'light' ? 'rgba(2,6,23,0.06)' : 'rgba(255,255,255,0.04)';
+            // rounded rect path
+            ctx.moveTo(rectX + radiusRound, rectY);
+            ctx.arcTo(rectX + rectW, rectY, rectX + rectW, rectY + rectH, radiusRound);
+            ctx.arcTo(rectX + rectW, rectY + rectH, rectX, rectY + rectH, radiusRound);
+            ctx.arcTo(rectX, rectY + rectH, rectX, rectY, radiusRound);
+            ctx.arcTo(rectX, rectY, rectX + rectW, rectY, radiusRound);
+            ctx.closePath();
+            ctx.fill();
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+
+            // texto
+            ctx.fillStyle = theme === 'light' ? '#07122a' : '#ffffff';
+            ctx.fillText(textToDraw, x, rectY + rectH / 2);
+
+            ctx.restore();
+          }}
         />
       </div>
     );

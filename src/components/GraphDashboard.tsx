@@ -443,7 +443,17 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                 {/* ... (lógica de lista de grafos sin cambios) ... */}
                 <div className="space-y-2 mt-2">
                     {graphs.map((graph) => (
-                    <button key={graph.id} onClick={() => setSelectedGraph(graph)} className={`w-full text-left p-3 rounded-lg transition-colors ${selectedGraph?.id === graph.id ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                    <button
+                      key={graph.id}
+                      onClick={() => setSelectedGraph(graph)}
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        selectedGraph?.id === graph.id
+                          ? 'bg-theme-accent text-white'
+                          : (preferences.theme === 'light'
+                              ? 'bg-slate-100 hover:bg-slate-200 text-theme-text-primary'
+                              : 'bg-slate-700 hover:bg-slate-600 text-white')
+                      }`}
+                    >
                         <div className="font-medium truncate">{graph.title || 'Grafo sin título'}</div>
                     </button>
                     ))}
@@ -454,10 +464,49 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                    <h3 className="text-sm font-semibold mb-3">Tipo de Acción</h3>
                    {/* --- 4. MODIFICADO: Usar color de acento en botones de acción --- */}
                    <div className="space-y-2">
-                      <button onClick={() => setActionType('create')} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'create' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'}`}> <Plus size={16} /> Crear Nuevo </button>
-                      <button onClick={() => setActionType('add_content')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'add_content' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FileText size={16} /> Añadir Contenido </button>
-                      <button onClick={() => setActionType('refine')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'refine' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <RefreshCw size={16} /> Refinar (Feedback) </button>
-                      <button onClick={() => setActionType('focus')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'focus' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FocusIcon size={16} /> Enfocar Tópico </button>
+                      <button
+                        onClick={() => setActionType('create')}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          actionType === 'create'
+                            ? 'bg-theme-accent text-white'
+                            : (preferences.theme === 'light'
+                                ? 'bg-slate-100 hover:bg-slate-200 text-theme-text-primary'
+                                : 'bg-slate-700 hover:bg-slate-600 text-white')
+                        }`}
+                      > <Plus size={16} /> Crear Nuevo </button>
+                      <button
+                        onClick={() => setActionType('add_content')}
+                        disabled={!selectedGraph}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          actionType === 'add_content'
+                            ? 'bg-theme-accent text-white'
+                            : (preferences.theme === 'light'
+                                ? 'bg-slate-100 hover:bg-slate-200 text-theme-text-primary'
+                                : 'bg-slate-700 hover:bg-slate-600 text-white')
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      > <FileText size={16} /> Añadir Contenido </button>
+                      <button
+                        onClick={() => setActionType('refine')}
+                        disabled={!selectedGraph}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          actionType === 'refine'
+                            ? 'bg-theme-accent text-white'
+                            : (preferences.theme === 'light'
+                                ? 'bg-slate-100 hover:bg-slate-200 text-theme-text-primary'
+                                : 'bg-slate-700 hover:bg-slate-600 text-white')
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      > <RefreshCw size={16} /> Refinar (Feedback) </button>
+                      <button
+                        onClick={() => setActionType('focus')}
+                        disabled={!selectedGraph}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          actionType === 'focus'
+                            ? 'bg-theme-accent text-white'
+                            : (preferences.theme === 'light'
+                                ? 'bg-slate-100 hover:bg-slate-200 text-theme-text-primary'
+                                : 'bg-slate-700 hover:bg-slate-600 text-white')
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      > <FocusIcon size={16} /> Enfocar Tópico </button>
                    </div>
               </div>
            </div>
