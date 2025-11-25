@@ -1,7 +1,7 @@
 // src/lib/api.ts
 import { GraphSummary, GraphData, Preferences } from './types'; // Importar Preferences
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.223:8000';
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.1.17.177:8000';
 
 async function fetchApi(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${BASE_URL}${endpoint}`, {

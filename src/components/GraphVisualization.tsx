@@ -7,6 +7,7 @@ import ForceGraph2D, {
 } from 'react-force-graph-2d';
 import { Node, Edge, Preferences } from '../lib/types';
 
+
 interface GraphNode {
   id: string;
   label: string;
@@ -45,6 +46,23 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
       ForceGraphMethods<NodeObject<GraphNode>, LinkObject<GraphNode, GraphLink>> | undefined
     >(undefined);
     const containerRef = useRef<HTMLDivElement>(null);
+    const [size, setSize] = useState({ width: 600, height: 400 });
+
+    // ResizeObserver para que el canvas tenga el tamaño real del contenedor
+   useEffect(() => {
+     const el = containerRef.current;
+     if (!el) return;
+    const ro = new ResizeObserver(() => {
+       const rect = el.getBoundingClientRect();
+       setSize({ width: Math.max(200, Math.floor(rect.width)), height: Math.max(200, Math.floor(rect.height)) });
+      });
+      ro.observe(el);
+      // inicializar tamaño
+     const r = el.getBoundingClientRect();
+      setSize({ width: Math.max(200, Math.floor(r.width)), height: Math.max(200, Math.floor(r.height)) });
+      return () => ro.disconnect();
+    }, []);
+
     const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({ nodes: [], links: [] });
 
     const exportToPNG = (scale = 2) => {
@@ -116,6 +134,19 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
       }
     }, [graphData]);
 
+    // Re-ajustar vista cuando los datos cambian
+    useEffect(() => {
+      const fg = fgRef.current as any;
+      if (!fg) return;
+      // esperar un tick para dejar que la simulación arranque y luego ajustar vista
+      const t = setTimeout(() => {
+        try {
+          if (fg.zoomToFit) fg.zoomToFit(400, 40);
+        } catch (e) {}
+      }, 200);
+      return () => clearTimeout(t);
+    }, [graphData, size]);
+
     const linkColor = theme === 'light' ? '#475569' : '#64748b';
     const backgroundColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
     const nodeTextColor = theme === 'light' ? '#020617' : '#ffffff';
@@ -137,10 +168,34 @@ export const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisu
     };
 
     return (
-      <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden">
+      <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg overflow-hidden">
         <ForceGraph2D<GraphNode, GraphLink>
           ref={fgRef}
           graphData={graphData}
+          width={size.width}
+          height={size.height}
+          // prevenir zoom extremo / asegurar encaje en contenedor
+          onEngineStop={() => {
+            const fg = fgRef.current as any;
+            try {
+              // limitar zoom si d3-zoom está expuesto (no rompe si no existe)
+              if (fg?.d3Zoom) {
+                const z = fg.d3Zoom();
+                if (z?.scaleExtent) z.scaleExtent([0.6, 2]);
+              // limitar pan para que no se pierda el grafo fuera del área
+               if (z?.translateExtent) z.translateExtent([[ -size.width, -size.height ], [ size.width * 2, size.height * 2 ]]);
+              }
+              // centrar y ajustar al tamaño del contenedor
+              if (fg?.zoomToFit) fg.zoomToFit(400, 40);
+            } catch (e) {
+              // no crítico
+              // console.warn('No se pudo limitar zoom/ajustar vista:', e);
+            }
+          }}
+          // opcional: cuando cambian datos, re-ajustar vista
+          onEngineTick={() => {
+            /* mantener el motor en funcionamiento; el ajuste real se hace en onEngineStop */
+          }}
           nodeLabel={(node) =>
             detailLevel === 'simple'
               ? node.label

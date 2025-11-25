@@ -482,18 +482,20 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                 </button>
               </div>
 
-                <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-hidden">
+                <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-auto min-h-0 relative">
                     {loading && <div className="flex items-center justify-center h-full text-theme-text-secondary"><Loader2 className="animate-spin mr-2"/> Cargando...</div>}
                     {!loading && graphData.nodes.length > 0 ? (
-                        <GraphVisualization
-                            ref={graphRef}
-                            nodes={graphData.nodes}
-                            edges={graphData.edges}
-                            onNodeClick={handleNodeClick}
-                            detailLevel={preferences.detail_level}
-                            theme={preferences.theme}
-                            highlightNodeId={currentNodeId}
-                        />
+                        <div className="w-full h-full min-h-0">
+                          <GraphVisualization
+                              ref={graphRef}
+                              nodes={graphData.nodes}
+                              edges={graphData.edges}
+                              onNodeClick={handleNodeClick}
+                              detailLevel={preferences.detail_level}
+                              theme={preferences.theme}
+                              highlightNodeId={currentNodeId}
+                          />
+                        </div>
                     ) : (
                        !loading && (
                          <div className="flex items-center justify-center h-full text-theme-text-secondary">
