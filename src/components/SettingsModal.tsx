@@ -82,8 +82,8 @@ export function SettingsModal({
               <Palette size={16} />
               Tema Visual
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['dark', 'light', 'ocean'] as const).map((t) => (
+            <div className="grid grid-cols-2 gap-2">
+              {(['dark', 'light'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTheme(t)}
