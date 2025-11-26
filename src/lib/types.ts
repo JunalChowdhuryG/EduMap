@@ -40,3 +40,20 @@ export interface Preferences {
   detail_level: 'simple' | 'detailed'; // Nivel de detalle
   persona_type: 'estudiante' | 'profesor' | 'investigador'; // User Persona
 }
+
+export interface Question {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+}
+
+export interface QuizData {
+  questions: Question[];
+}
+
+export interface UserProfile {
+  xp: number;
+  level: number;
+  graphs_created: number;
+}

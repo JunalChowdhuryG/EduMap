@@ -1,7 +1,7 @@
 // src/lib/api.ts
-import { GraphSummary, GraphData, Preferences } from './types'; // Importar Preferences
+import { GraphSummary, GraphData, QuizData, UserProfile, Preferences } from './types'; // Importar Preferences
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.223:8000';
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.157:8000';
 
 async function fetchApi(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -61,13 +61,35 @@ export const expandNode = (
   message: string,
   graph_id: string,
   user_id: string,
-  previous_graph: GraphData
+  previous_graph: GraphData,
+  context?: string
 ): Promise<{ graph_id: string; graph: GraphData }> => {
   return fetchApi('/expand_node', {
     method: 'POST',
-    body: JSON.stringify({ message, graph_id, user_id, previous_graph }),
+    body: JSON.stringify({ message, graph_id, user_id, previous_graph, context }),
   });
 };
+
+export const generateQuiz = (graph_id: string): Promise<QuizData> => {
+  return fetchApi('/generate_quiz', {
+    method: 'POST',
+    body: JSON.stringify({ graph_id }),
+  });
+};
+
+export const updateUserStats = (user_id: string, xp_gained: number, graphs_increment: number = 0): Promise<UserProfile> => {
+  return fetchApi('/update_user_stats', {
+    method: 'POST',
+    body: JSON.stringify({ user_id, xp_gained, graphs_increment }),
+  });
+};
+
+export const getUserProfile = (user_id: string): Promise<UserProfile> => {
+  return fetchApi(`/get_user_profile/${user_id}`);
+};
+
+
+
 
 export const uploadFile = async (file: File): Promise<{ extracted_text: string | null, notification: string | null }> => {
   const formData = new FormData();
@@ -138,3 +160,4 @@ export const updatePreferences = (user_id: string, content: Preferences): Promis
     body: JSON.stringify({ user_id, content }),
   });
 };
+
