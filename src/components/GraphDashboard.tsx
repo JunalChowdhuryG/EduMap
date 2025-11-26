@@ -1,17 +1,18 @@
 // src/components/GraphDashboard.tsx
 import { useState, useEffect, useRef } from 'react';
 import * as api from '../lib/api';
-import { GraphSummary, GraphData, Node as NodeType, Preferences } from '../lib/types';
+import { GraphSummary, GraphData, Node as NodeType, Preferences, QuizData, UserProfile } from '../lib/types';
 import { GraphVisualization, GraphVisualizationHandle } from './GraphVisualization';
 import { NodeDetailModal } from './NodeDetailModal';
 import { SettingsModal } from './SettingsModal';
+import { QuizModal } from './QuizModal';
 import { useGraphTour } from '../lib/useGraphTour';
 import {
   Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload,
   HelpCircle, BarChart2, Save, LogOut, Settings,
-  FileJson,
-  Play, StopCircle
+  FileJson, Play, StopCircle, Trophy
 } from 'lucide-react';
+import { Award, GraduationCap, Star } from 'lucide-react';
 
 interface ModalNode extends NodeType {}
 
@@ -27,6 +28,7 @@ const defaultPreferences: Preferences = {
 };
 
 export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
+  // --- ESTADOS ---
   const [user_id, setUserId] = useState<string | null>(() => sessionStorage.getItem('knowledge_graph_user_id'));
   const [graphs, setGraphs] = useState<GraphSummary[]>([]);
   const [selectedGraph, setSelectedGraph] = useState<GraphSummary | null>(null);
@@ -40,18 +42,24 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   const [modalNode, setModalNode] = useState<ModalNode | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
-  
+
+  // Estados nuevos para Gamificación y Quiz
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizData, setQuizData] = useState<QuizData | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+
   const { startTour, stopTour, isTouring, currentNodeId } = useGraphTour(
     graphData.nodes,
     graphData.edges
   );
-  
+
   const ws = useRef<WebSocket | null>(null);
   const graphRef = useRef<GraphVisualizationHandle>(null);
 
-  const handleNodeClick = (nodeData: NodeType) => { setModalNode(nodeData); };
+  // --- EFECTOS ---
 
-  // Efecto para inicializar el usuario temporal
+  // 1. Inicializar Usuario
   useEffect(() => {
     const initUser = async () => {
       let id = sessionStorage.getItem('knowledge_graph_user_id');
@@ -73,32 +81,26 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 2. Cargar Perfil (Gamificación)
+  useEffect(() => {
+    if (user_id) {
+      api.getUserProfile(user_id).then(setUserProfile).catch(console.error);
+    }
+  }, [user_id]);
+
+  // 3. Configurar acción por defecto según persona
   useEffect(() => {
     switch(preferences.persona_type) {
-      case 'estudiante':
-        setActionType('create'); // Los estudiantes usualmente empiezan creando
-        break;
-      case 'profesor':
-        setActionType('add_content'); // Los profesores añaden a un grafo existente
-        break;
-      case 'investigador':
-        setActionType('refine'); // Los investigadores refinan y analizan
-        break;
+      case 'estudiante': setActionType('create'); break;
+      case 'profesor': setActionType('add_content'); break;
+      case 'investigador': setActionType('refine'); break;
     }
   }, [preferences.persona_type]);
 
-
-
-
-
-
-
-
-  // Efecto para cargar las preferencias
+  // 4. Cargar Preferencias
   useEffect(() => {
     const loadPreferences = async () => {
       if (!user_id) return;
-      console.log("Cargando preferencias del usuario...");
       try {
         const data = await api.getPreferences(user_id);
         setPreferences({ ...defaultPreferences, ...data.preferences }); 
@@ -109,7 +111,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     loadPreferences();
   }, [user_id]);
 
-  // Efecto para cargar el historial de grafos
+  // 5. Cargar Historial de Grafos
   useEffect(() => {
     const loadGraphs = async () => {
       if (!user_id) return;
@@ -124,33 +126,22 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     loadGraphs();
   }, [user_id]);
 
-  // --- ESTE ES EL BLOQUE CORREGIDO ---
-  // Efecto para cargar datos y conectar WebSocket cuando 'selectedGraph' cambia
+  // 6. WebSocket y Carga de Grafo Seleccionado
   useEffect(() => {
-    
-    // 1. Función para conectar al WebSocket
     const connectWebSocket = (graphId: string) => {
-      if (ws.current) {
-        ws.current.close();
-      }
+      if (ws.current) ws.current.close();
       
-      const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.223:8000')
-          .replace('http', 'ws');
-          
-      console.log(`Conectando a WebSocket: ${wsUrl}/ws/${graphId}`);
+      const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000').replace('http', 'ws');
       ws.current = new WebSocket(`${wsUrl}/ws/${graphId}`);
 
-      ws.current.onopen = () => {
-        console.log(`WebSocket conectado para el grafo: ${graphId}`);
-      };
-
+      ws.current.onopen = () => console.log(`WebSocket conectado: ${graphId}`);
+      
       ws.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'update' && data.graph) {
-            console.log("Recibida actualización del grafo vía WebSocket!");
             setGraphData(data.graph);
-            
+            // Actualizar modal si está abierto
             setModalNode(prevNode => {
               if (prevNode) {
                 const updatedNode = data.graph.nodes.find((n: NodeType) => n.id === prevNode.id);
@@ -159,56 +150,41 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
               return null;
             });
           }
-        } catch (e) {
-          console.error("Error al procesar mensaje WS:", e);
-        }
+        } catch (e) { console.error("Error WS:", e); }
       };
 
-      ws.current.onerror = (err) => {
-        console.error("Error de WebSocket:", err);
-      };
-
-      ws.current.onclose = () => {
-        console.log(`WebSocket desconectado del grafo: ${graphId}`);
-        ws.current = null;
-      };
+      ws.current.onclose = () => { ws.current = null; };
     };
 
-    // 2. Función para cargar los datos del grafo
     const loadGraphData = async (graphId: string) => {
       setLoading(true); setError('');
       try {
         const data = await api.getGraph(graphId);
         setGraphData(data.graph || { nodes: [], edges: [] });
-        // Solo conectar al WS *después* de cargar los datos
         connectWebSocket(graphId);
       } catch (err: any) {
         setError(err.message || 'Error cargando datos del grafo');
       } finally { setLoading(false); }
     };
 
-    // 3. Lógica de ejecución del efecto
     if (selectedGraph) {
       loadGraphData(selectedGraph.id);
     }
 
-    // 4. Función de limpieza
-    return () => {
-      if (ws.current) {
-        console.log("Cerrando conexión WS en cleanup.");
-        ws.current.close();
-      }
-    };
-  }, [selectedGraph]); // Dependencia correcta
+    return () => { if (ws.current) ws.current.close(); };
+  }, [selectedGraph]);
 
-  
-  // --- FIN DEL BLOQUE CORREGIDO ---
+
+  // --- HANDLERS ---
+
+  const handleNodeClick = (nodeData: NodeType) => { setModalNode(nodeData); };
 
   const handleGenerateGraph = async (
     isNodeExpansion: boolean = false,
-    nodeExpandLabel: string = ''
+    nodeExpandLabel: string = '',
+    contextFileText?: string
   ) => {
-     const textToUse = isNodeExpansion ? `Expandir: ${nodeExpandLabel}` : inputText;
+    const textToUse = isNodeExpansion ? `Expandir: ${nodeExpandLabel}` : inputText;
     if (!textToUse.trim()) { setError('Por favor, introduce algún texto'); return; }
     if (!user_id) { setError('Usuario no inicializado'); return; }
 
@@ -217,34 +193,30 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
       const currentGraphId = selectedGraph?.id;
       const currentGraphData = (actionType !== 'create' && graphData.nodes.length > 0) ? graphData : null;
       let result: { graph_id: string; graph: GraphData };
-      let effectiveActionType = isNodeExpansion ? 'focus' : actionType;
+      const effectiveActionType = isNodeExpansion ? 'focus' : actionType;
 
       switch (effectiveActionType) {
         case 'create':
           result = await api.generateGraph(textToUse, user_id, textToUse.substring(0, 100));
-          const newGraphSummary = { id: result.graph_id, title: textToUse.substring(0, 100) };
-          setGraphs(prevGraphs => [...prevGraphs, newGraphSummary]);
-          setSelectedGraph(newGraphSummary); // Esto disparará el useEffect de WS
+          const newSummary = { id: result.graph_id, title: textToUse.substring(0, 100) };
+          setGraphs(prev => [...prev, newSummary]);
+          setSelectedGraph(newSummary);
           setGraphData(result.graph);
           break;
-         case 'refine':
+        case 'refine':
           if (!currentGraphId) { setError('Selecciona un grafo para refinar'); return; }
           result = await api.refineGraph(textToUse, currentGraphId, user_id);
-          setGraphData(result.graph); // El backend notificará a otros por WS
+          setGraphData(result.graph);
           break;
         case 'add_content':
           if (!currentGraphId || !selectedGraph) { setError('Selecciona un grafo para añadir contenido'); return; }
           result = await api.generateGraph(textToUse, user_id, selectedGraph.title, currentGraphData);
-           setGraphData(result.graph);
-           setGraphs(prev => prev.map(g => g.id === currentGraphId ? {...g, title: selectedGraph.title} : g));
+          setGraphData(result.graph);
           break;
         case 'focus':
           if (!currentGraphId || !currentGraphData) { setError('Selecciona un grafo para enfocar'); return; }
-          result = await api.expandNode(textToUse, currentGraphId, user_id, currentGraphData);
+          result = await api.expandNode(textToUse, currentGraphId, user_id, currentGraphData, contextFileText);
           setGraphData(result.graph);
-           if (selectedGraph) {
-              setGraphs(prev => prev.map(g => g.id === currentGraphId ? {...g, title: selectedGraph.title} : g));
-           }
           break;
       }
       if (!isNodeExpansion) setInputText('');
@@ -261,8 +233,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
       if (result.extracted_text) setInputText(result.extracted_text);
       if (result.notification) setError(result.notification);
     } catch (err: any) { setError(err.message || 'Error al subir el archivo'); }
-    finally { setLoading(false); }
-    e.target.value = '';
+    finally { setLoading(false); e.target.value = ''; }
   };
 
   const handleContextualHelp = async () => {
@@ -290,63 +261,14 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     finally { setLoading(false); }
   };
 
-  const handleNodeExpand = (node: ModalNode) => {
-      setModalNode(null);
-      handleGenerateGraph(true, node.label);
-  };
-
   const handleExportPNG = () => {
     if (!graphRef.current?.exportToPNG) { setError('El grafo no está listo para exportar.'); return; }
-    // Ya no accedemos a canvasEl, llamamos a la función
     graphRef.current.exportToPNG();
   };
 
-  const handleSaveSettings = async (newPreferences: Preferences) => {
-    if (!user_id) {
-      setError("No se puede guardar, sesión no iniciada.");
-      return;
-    }
-    setSettingsLoading(true);
-    try {
-      const data = await api.updatePreferences(user_id, newPreferences);
-      setPreferences(data.preferences);
-      setShowSettingsModal(false);
-    } catch (err: any) {
-      console.error("Error al guardar preferencias:", err);
-      setError(err.message || "No se pudo guardar preferencias.");
-    } finally {
-      setSettingsLoading(false);
-    }
-  };
-
-  const handleDeleteNode = async (nodeToDelete: ModalNode) => {
-    if (!user_id || !selectedGraph) {
-      setError("Se requiere sesión y grafo para eliminar.");
-      return;
-    }
-    
-    if (!confirm(`¿Estás seguro de que quieres eliminar el nodo "${nodeToDelete.label}"?`)) {
-      return;
-    }
-
-    setDeleteLoading(true);
-    try {
-      await api.deleteNode(selectedGraph.id, nodeToDelete.id, user_id);
-      setModalNode(null); // El WS actualizará el grafo
-    } catch (err: any) {
-      setError("Error al eliminar: " + err.message);
-    } finally {
-      setDeleteLoading(false);
-    }
-  };
-
   const handleExportJSON = async () => {
-    if (!selectedGraph) {
-      setError("Por favor, selecciona un grafo para exportar.");
-      return;
-    }
+    if (!selectedGraph) { setError("Por favor, selecciona un grafo para exportar."); return; }
     setError('');
-    
     try {
       const graphJsonData = await api.exportGraph(selectedGraph.id);
       const jsonString = JSON.stringify(graphJsonData, null, 2);
@@ -354,78 +276,122 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const fileName = `${selectedGraph.title?.replace(/[^a-z0-9]/gi, '_') || 'grafo'}.json`;
-      link.download = fileName;
+      link.download = `${selectedGraph.title?.replace(/[^a-z0-9]/gi, '_') || 'grafo'}.json`;
+      link.download = link.download; // Corrección menor
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      console.error("Error al exportar JSON:", err);
-      setError(err.message || "No se pudo exportar el JSON.");
-    }
+    } catch (err: any) { setError(err.message || "No se pudo exportar el JSON."); }
   };
 
+  const handleSaveSettings = async (newPreferences: Preferences) => {
+    if (!user_id) { setError("No se puede guardar, sesión no iniciada."); return; }
+    setSettingsLoading(true);
+    try {
+      const data = await api.updatePreferences(user_id, newPreferences);
+      setPreferences(data.preferences);
+      setShowSettingsModal(false);
+    } catch (err: any) {
+      setError(err.message || "No se pudo guardar preferencias.");
+    } finally { setSettingsLoading(false); }
+  };
+
+  const handleDeleteNode = async (nodeToDelete: ModalNode) => {
+    if (!user_id || !selectedGraph) { setError("Se requiere sesión y grafo para eliminar."); return; }
+    if (!confirm(`¿Estás seguro de que quieres eliminar el nodo "${nodeToDelete.label}"?`)) return;
+
+    setDeleteLoading(true);
+    try {
+      await api.deleteNode(selectedGraph.id, nodeToDelete.id, user_id);
+      setModalNode(null);
+    } catch (err: any) {
+      setError("Error al eliminar: " + err.message);
+    } finally { setDeleteLoading(false); }
+  };
+
+  // --- Handlers para Quiz ---
+  const handleStartQuiz = async () => {
+    if (!selectedGraph) return;
+    setQuizLoading(true);
+    try {
+      const data = await api.generateQuiz(selectedGraph.id);
+      setQuizData(data);
+      setShowQuiz(true);
+    } catch (e: any) {
+      setError("No se pudo generar el quiz: " + e.message);
+    } finally { setQuizLoading(false); }
+  };
+
+  const handleQuizComplete = async (score: number, total: number) => {
+    if (!user_id) return;
+    const xpGained = score * 20;
+    try {
+      const newStats = await api.updateUserStats(user_id, xpGained);
+      setUserProfile(newStats);
+    } catch (e) { console.error("Error actualizando stats", e); }
+  };
+
+  // --- RENDER ---
   const themeClass = preferences.theme === 'light' ? 'theme-light' : 'theme-dark';
-  const personaClass = `persona-${preferences.persona_type}`; // ej. 'persona-estudiante'
+  const personaClass = `persona-${preferences.persona_type}`;
+
   return (
     <div className={`min-h-screen bg-gradient-to-br ${themeClass} ${personaClass}`}>
+      
+      {/* HEADER */}
       <header className="border-b border-theme-border bg-theme-header-bg bg-opacity-50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          
-          {/* Título con color de acento */}
           <h1 className="text-2xl font-bold text-theme-accent">
-            EduMap
-            {/* Muestra el rol actual */}
-            <span className="text-sm font-normal text-theme-text-secondary ml-2 capitalize">
-              ({preferences.persona_type})
-            </span>
+            EduMap <span className="text-sm font-normal text-theme-text-secondary ml-2 capitalize">({preferences.persona_type})</span>
           </h1>
+          
+          {/* --- PERFIL VISUAL (Gamificación) --- */}
+          {userProfile && (
+            <div className="hidden md:flex items-center gap-4 bg-slate-800/50 px-4 py-1 rounded-full border border-slate-700">
+              <div className="flex items-center gap-1 text-yellow-400" title="Nivel">
+                <Star size={16} fill="currentColor" />
+                <span className="font-bold">NVL {userProfile.level}</span>
+              </div>
+              <div className="h-4 w-px bg-slate-600"></div>
+              <div className="flex items-center gap-1 text-blue-300" title="Puntos de Experiencia">
+                <Award size={16} />
+                <span>{userProfile.xp} XP</span>
+              </div>
+              <div className="h-4 w-px bg-slate-600"></div>
+              <div className="flex items-center gap-1 text-green-300" title="Grafos Creados">
+                <GraduationCap size={16} />
+                <span>{userProfile.graphs_created}</span>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-4">
-            <span className="text-sm text-theme-text-secondary hidden sm:inline">{userEmail}</span>
              <div className="flex items-center gap-1">
-                
-                {/* --- 3. MODIFICADO: Barra de herramientas condicional --- */}
                 <button onClick={() => setShowSettingsModal(true)} title="Ajustes (RF05)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <Settings size={20} /> </button>
                 
-                {/* Profesor e Investigador: Exportar */}
                 {(preferences.persona_type === 'profesor' || preferences.persona_type === 'investigador') && (
                   <>
-                    <button
-                      onClick={handleExportJSON}
-                      title="Exportar como JSON (RF08)"
-                      disabled={!selectedGraph || graphData.nodes.length === 0}
-                      className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"
-                    >
-                      <FileJson size={20} />
-                    </button>
-                    <button onClick={handleExportPNG} title="Exportar como PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
+                    <button onClick={handleExportJSON} title="Exportar JSON (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <FileJson size={20} /> </button>
+                    <button onClick={handleExportPNG} title="Exportar PNG (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <Save size={20} /> </button>
                   </>
                 )}
 
-                {/* Estudiante y Profesor: Ayuda y Recorrido */}
                 {(preferences.persona_type === 'estudiante' || preferences.persona_type === 'profesor') && (
                   <>
                     <button onClick={handleContextualHelp} title="Ayuda Contextual (RF07)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <HelpCircle size={20} /> </button>
-                    <button
-                      onClick={() => (isTouring ? stopTour() : startTour())}
-                      title={isTouring ? "Detener Recorrido" : "Iniciar Recorrido Narrado"}
-                      disabled={!selectedGraph || graphData.nodes.length === 0}
-                      className={`p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 ${isTouring ? 'text-red-400' : ''}`}
-                    >
-                      {isTouring ? <StopCircle size={20} /> : <Play size={20} />}
-                    </button>
+                    <button onClick={() => (isTouring ? stopTour() : startTour())} title={isTouring ? "Detener Recorrido" : "Iniciar Recorrido Narrado"} disabled={!selectedGraph || graphData.nodes.length === 0} className={`p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 ${isTouring ? 'text-red-400' : ''}`}> {isTouring ? <StopCircle size={20} /> : <Play size={20} />} </button>
                   </>
                 )}
 
-                {/* Investigador: Analizar Grafo */}
                 {preferences.persona_type === 'investigador' && (
                   <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <BarChart2 size={20} /> </button>
                 )}
+                
+                {/* BOTÓN DE QUIZ */}
+                <button onClick={handleStartQuiz} disabled={!selectedGraph || quizLoading} title="Iniciar Evaluación" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 text-yellow-400"> {quizLoading ? <Loader2 className="animate-spin" size={20}/> : <Trophy size={20} />} </button>
 
-                {/* Todos: Subir Archivo */}
-                <label htmlFor="file-upload" title="Subir Archivo (.txt, .pdf, .mp3, etc.)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon cursor-pointer"> <Upload size={20} /> </label>
+                <label htmlFor="file-upload" title="Subir Archivo" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon cursor-pointer"> <Upload size={20} /> </label>
                 <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload}/>
              </div>
             <button onClick={onLogout} className="flex items-center gap-2 px-3 py-1.5 bg-theme-secondary-bg hover:bg-theme-hover rounded-lg transition-colors text-sm text-theme-text-secondary">
@@ -435,12 +401,17 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
         </div>
       </header>
 
+      {/* BODY (Esto es lo que faltaba en tu código) */}
       <div className="max-w-7xl mx-auto px-4 py-6 text-theme-text-primary">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-180px)]">
+           
+           {/* BARRA LATERAL */}
            <div className="lg:col-span-1 space-y-4 overflow-auto">
              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <h2 className="text-lg font-semibold mb-4">Grafos de esta Sesión</h2>
-                {/* ... (lógica de lista de grafos sin cambios) ... */}
+                 {loading && graphs.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
+                 {!loading && graphs.length === 0 && !error && <p className="text-sm text-slate-500">Crea tu primer grafo.</p>}
+                 {error && <p className="text-sm text-red-400">{error}</p>}
                 <div className="space-y-2 mt-2">
                     {graphs.map((graph) => (
                     <button key={graph.id} onClick={() => setSelectedGraph(graph)} className={`w-full text-left p-3 rounded-lg transition-colors ${selectedGraph?.id === graph.id ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'}`}>
@@ -452,7 +423,6 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
 
              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                    <h3 className="text-sm font-semibold mb-3">Tipo de Acción</h3>
-                   {/* --- 4. MODIFICADO: Usar color de acento en botones de acción --- */}
                    <div className="space-y-2">
                       <button onClick={() => setActionType('create')} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'create' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'}`}> <Plus size={16} /> Crear Nuevo </button>
                       <button onClick={() => setActionType('add_content')} disabled={!selectedGraph} className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${actionType === 'add_content' ? 'bg-theme-accent' : 'bg-slate-700 hover:bg-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}> <FileText size={16} /> Añadir Contenido </button>
@@ -462,9 +432,9 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
               </div>
            </div>
 
+           {/* ÁREA PRINCIPAL */}
            <div className="lg:col-span-3 flex flex-col gap-4">
               <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
-                {/* ... (textarea sin cambios) ... */}
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
@@ -472,7 +442,6 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                   className="w-full h-32 px-4 py-3 bg-theme-input-bg border border-theme-border rounded-lg text-theme-text-primary placeholder-theme-text-secondary focus:outline-none focus:ring-2 ring-theme-accent resize-none"
                 />
                 {error && (<div className="mt-2 text-sm text-red-400">{error}</div>)}
-                {/* Botón principal con color de acento */}
                 <button
                   onClick={() => handleGenerateGraph(false)}
                   disabled={loading || !user_id}
@@ -482,7 +451,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                 </button>
               </div>
 
-                <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-hidden">
+                <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-hidden h-full min-h-[400px]">
                     {loading && <div className="flex items-center justify-center h-full text-theme-text-secondary"><Loader2 className="animate-spin mr-2"/> Cargando...</div>}
                     {!loading && graphData.nodes.length > 0 ? (
                         <GraphVisualization
@@ -506,10 +475,32 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                     )}
                 </div>
            </div>
+
         </div>
       </div>
 
-       {showSettingsModal && (
+      {/* MODALES */}
+      {modalNode && (
+        <NodeDetailModal
+          node={modalNode}
+          onClose={() => setModalNode(null)}
+          onExpandNode={(node, fileContext) => {
+            setModalNode(null);
+            handleGenerateGraph(true, node.label, fileContext);
+          }}
+          onAddComment={async (text) => {
+            if (!user_id || !selectedGraph) return;
+            try {
+                 await api.addComment(selectedGraph.id, modalNode.id, text, user_id);
+                 const updatedNode = { ...modalNode, comments: [...(modalNode.comments || []), { user_id, text, timestamp: new Date().toISOString() }] };
+                 setModalNode(updatedNode);
+            } catch (commentError: any) { setError("Error al añadir comentario: " + commentError.message); }
+          }}
+          onDeleteNode={handleDeleteNode}
+          isDeleting={deleteLoading}
+        />
+      )}
+      {showSettingsModal && (
         <SettingsModal
           currentPreferences={preferences}
           onClose={() => setShowSettingsModal(false)}
@@ -517,27 +508,11 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
           isLoading={settingsLoading}
         />
        )}
-
-       {modalNode && (
-        <NodeDetailModal
-          node={modalNode}
-          onClose={() => setModalNode(null)}
-          onExpandNode={handleNodeExpand}
-          onAddComment={async (text) => {
-            if (!user_id || !selectedGraph) { setError("Se requiere sesión y grafo para comentar."); return; }
-            try {
-                 // La API ahora actualiza y transmite por WS
-                 await api.addComment(selectedGraph.id, modalNode.id, text, user_id);
-                 // El WS debería actualizar el estado, pero actualizamos el modal localmente
-                 const updatedNode = {
-                   ...modalNode,
-                   comments: [...(modalNode.comments || []), { user_id, text, timestamp: new Date().toISOString() }]
-                 };
-                 setModalNode(updatedNode);
-            } catch (commentError: any) { setError("Error al añadir comentario: " + commentError.message); }
-          }}
-          onDeleteNode={handleDeleteNode}
-          isDeleting={deleteLoading}
+      {showQuiz && quizData && (
+        <QuizModal
+          quizData={quizData}
+          onClose={() => setShowQuiz(false)}
+          onComplete={handleQuizComplete}
         />
       )}
     </div>

@@ -13,10 +13,12 @@ import speech_recognition as sr
 from PIL import Image
 import pytesseract
 from collections import defaultdict
-from sqlalchemy import create_engine, Column, String, Text, ForeignKey, JSON as SQLJSON, event
+from sqlalchemy import create_engine, Column, String, Text, ForeignKey, JSON as SQLJSON, event, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 import networkx as nx
+import random
+
 
 # Usamos un nuevo nombre de archivo para la base de datos relacional.
 DATABASE_URL = "sqlite:///./knowledge_graphs_relational.db"
@@ -31,7 +33,7 @@ if os.path.exists(OLD_DB_FILE):
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
 )
-
+#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
 # Habilitar claves foráneas (FK) para SQLite para que funcione ON DELETE CASCADE
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -47,11 +49,24 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    # --- NUEVOS CAMPOS PARA GAMIFICACIÓN ---
+    xp = Column(Integer, default=0)
+    level = Column(Integer, default=1)
+    graphs_created = Column(Integer, default=0)
+    # ---------------------------------------
     preferences = relationship("Preference", back_populates="user", cascade="all, delete-orphan")
-    # Relación para saber qué grafos le pertenecen (para el historial)
     graphs = relationship("KnowledgeGraph", back_populates="user")
-    # Relación para saber qué nodos le pertenecen (para permisos)
     nodes = relationship("GraphNode", back_populates="owner")
+
+class QuizRequest(BaseModel):
+    graph_id: str
+
+class UserStatsUpdate(BaseModel):
+    user_id: str
+    xp_gained: int
+    graphs_increment: int = 0
+
+
 
 # La tabla de Preferencias se mantiene igual
 class Preference(Base):
@@ -128,7 +143,7 @@ def get_db():
         db.close()
 
 # Cliente Groq
-client = Groq(api_key=os.environ.get("GROQ_API_KEY", "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"))
+client = Groq(api_key=os.environ.get("GROQ_API_KEY", "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"))
 
 # SYSTEM_PROMPT 
 SYSTEM_PROMPT = """
@@ -166,12 +181,18 @@ Responde ÚNICAMENTE con un objeto JSON válido en el siguiente formato, sin tex
 """
 
 app = FastAPI()
-origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://10.60.0.223:5173"] # Añadida IP de ejemplo
+origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://10.60.0.157:5173"] # Añadida IP de ejemplo
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 collaborations: Dict[str, List[WebSocket]] = defaultdict(list)
 
 # Clases Pydantic 
-class GraphRequest(BaseModel): message: str; previous_graph: Optional[Dict] = None; graph_id: Optional[str] = None; title: Optional[str] = None; user_id: str
+class GraphRequest(BaseModel): 
+    message: str
+    previous_graph: Optional[Dict] = None
+    graph_id: Optional[str] = None
+    title: Optional[str] = None
+    user_id: str
+    context: Optional[str] = None
 class FeedbackRequest(BaseModel): feedback: str; graph_id: str; user_id: str
 class ExportRequest(BaseModel): graph_id: str; format: str
 class UserRequest(BaseModel): user_id: Optional[str] = None
@@ -422,18 +443,110 @@ async def get_previous_graph_json(graph_id: str, db: Session) -> Optional[Dict]:
 async def expand_node(request: GraphRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == request.user_id).first()
     if not user: raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if not request.graph_id: raise HTTPException(status_code=400, detail="Graph ID es requerido")
-
-    # Ensamblar el grafo anterior desde la DB
-    request.previous_graph = await get_previous_graph_json(request.graph_id, db)
-    if not request.previous_graph:
-        raise HTTPException(status_code=404, detail="Grafo no encontrado")
-        
-    if not request.message.startswith("Expandir:"): 
-        request.message = f"Expandir: {request.message}"
     
-    # Reutiliza la lógica principal de generate_graph
+    request.previous_graph = await get_previous_graph_json(request.graph_id, db)
+    
+    # Si hay contexto de archivo, lo inyectamos en el prompt
+    context_instruction = ""
+    if request.context:
+        context_instruction = f"\n\nUTILIZA ESTA INFORMACIÓN ADICIONAL DEL DOCUMENTO SUBIDO PARA EXPANDIR EL NODO:\n{request.context[:3000]}..." # Limitamos caracteres para no saturar
+
+    if not request.message.startswith("Expandir:"): 
+        request.message = f"Expandir: {request.message}{context_instruction}"
+    else:
+        request.message = f"{request.message}{context_instruction}"
+    
     return await generate_graph(request, db)
+
+@app.post("/generate_quiz")
+async def generate_quiz(request: QuizRequest, db: Session = Depends(get_db)):
+    graph_json = assemble_graph_json(request.graph_id, db)
+    if not graph_json or not graph_json["nodes"]:
+        raise HTTPException(status_code=400, detail="El grafo está vacío, no se puede generar un quiz.")
+
+    # Prompt para generar preguntas
+    nodes_text = ", ".join([n["label"] for n in graph_json["nodes"][:20]]) # Usamos los primeros 20 nodos
+    prompt = f"""
+    Basado en estos conceptos: {nodes_text}.
+    Genera 5 preguntas de opción múltiple para evaluar el conocimiento del estudiante.
+    
+    Responde ÚNICAMENTE con un JSON válido con este formato exacto:
+    {{
+        "questions": [
+            {{
+                "id": 1,
+                "question": "¿Pregunta?",
+                "options": ["Opción A", "Opción B", "Opción C", "Opción D"],
+                "correctAnswer": "Opción A" (debe coincidir exactamente con una de las opciones)
+            }}
+        ]
+    }}
+    """
+    
+    messages = [{"role": "system", "content": "Eres un profesor experto creando evaluaciones."},
+                {"role": "user", "content": prompt}]
+
+    try:
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-120b", # O llama-3.1-70b-versatile
+            messages=messages,
+            temperature=0.5,
+            response_format={"type": "json_object"} # Forzar JSON si el modelo lo soporta, sino usar regex
+        )
+        content = completion.choices[0].message.content
+        # Intento de parseo robusto
+        try:
+            quiz_data = json.loads(content)
+        except:
+            # Fallback regex si el modelo habla texto antes del json
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                quiz_data = json.loads(json_match.group(0))
+            else:
+                raise ValueError("No se pudo parsear JSON del quiz")
+                
+        return quiz_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando quiz: {str(e)}")
+
+@app.post("/update_user_stats")
+async def update_user_stats(stats: UserStatsUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == stats.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    # Actualizar XP
+    user.xp += stats.xp_gained
+    
+    # Actualizar Grafos creados
+    user.graphs_created += stats.graphs_increment
+    
+    # Lógica simple de nivel: Cada 100 XP es un nivel
+    new_level = 1 + (user.xp // 100)
+    user.level = new_level
+    
+    db.commit()
+    db.refresh(user)
+    
+    return {"xp": user.xp, "level": user.level, "graphs_created": user.graphs_created}
+
+
+@app.get("/get_user_profile/{user_id}")
+async def get_user_profile(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user: return {}
+    return {
+        "xp": user.xp,
+        "level": user.level,
+        "graphs_created": user.graphs_created
+    }
+
+
+
+
+
+
+
 
 @app.post("/refine_graph")
 async def refine_graph(request: FeedbackRequest, db: Session = Depends(get_db)):

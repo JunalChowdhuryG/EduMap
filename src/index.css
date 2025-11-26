@@ -105,7 +105,18 @@
 
 
 
-
+@layer base {
+  html, body {
+    @apply min-h-full;
+  }
+  
+  body {
+    /* Usamos variables CSS para que cambie dinámicamente con la clase del tema */
+    background-image: linear-gradient(to bottom right, var(--theme-bg-gradient-from), var(--theme-bg-gradient-via), var(--theme-bg-gradient-to));
+    background-attachment: fixed; /* Esto fija el fondo para que no se corte al scrollear */
+    color: var(--theme-text-primary);
+  }
+}
 
 /* src/index.css */
 /* ... (tus estilos de tema y persona) ... */
