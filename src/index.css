@@ -37,18 +37,19 @@
 
 /* Tema Ocean */
 .theme-ocean {
-  --theme-bg-gradient-from: #0c4a6e;
-  --theme-bg-gradient-via: #075985;
-  --theme-bg-gradient-to: #0c4a6e;
-  --theme-header-bg: #0369a1;
-  --theme-secondary-bg: #075985;
-  --theme-input-bg: #0c4a6e;
-  --theme-border: #0ea5e9;
-  --theme-hover: #0369a1;
-  --theme-text-primary: #f0f9ff;
-  --theme-text-secondary: #bae6fd;
-  --theme-icon: #e0f2fe;
-  --theme-accent: #0ea5e9; /* Azul cian */
+  /* Ocean: tonos teal/cian profundos para diferenciar del tema dark */
+  --theme-bg-gradient-from: #021826; /* muy oscuro azulado */
+  --theme-bg-gradient-via: #034f63;  /* teal medio */
+  --theme-bg-gradient-to: #012b3a;   /* verde azulado profundo */
+  --theme-header-bg: #013a4a;
+  --theme-secondary-bg: #023846;
+  --theme-input-bg: #044b5b;
+  --theme-border: #036b87;
+  --theme-hover: #025e74;
+  --theme-text-primary: #e6fbff; /* texto claro con tinte cian */
+  --theme-text-secondary: #9be7f0;
+  --theme-icon: #bdeffd;
+  --theme-accent: #06b6d4; /* Cyan brillante para acentos */
 }
 
 /* --- NUEVO: ESTILOS POR PERSONA --- */
