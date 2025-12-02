@@ -1,2 +1,2 @@
-client = Groq(api_key="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")
+client = Groq(api_key="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")
 openai/gpt-oss-20b

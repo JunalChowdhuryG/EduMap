@@ -1,11 +1,7 @@
 // src/lib/api.ts
 import { GraphSummary, GraphData, QuizData, UserProfile, Preferences } from './types'; // Importar Preferences
 
-<<<<<<< HEAD
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.157:8000';
-=======
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.1.17.177:8000';
->>>>>>> fix/VisualFixes
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://192.168.0.9:8000';
 
 async function fetchApi(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -18,6 +14,16 @@ async function fetchApi(endpoint: string, options: RequestInit = {}) {
   }
   return response.json();
 }
+
+export const deleteGraph = (graphId: string, userId: string) => 
+  fetchApi(`/delete_graph/${graphId}?user_id=${userId}`, { method: 'DELETE' });
+
+export const undoGraph = (graphId: string) => 
+  fetchApi(`/undo_graph/${graphId}`, { method: 'POST' });
+
+export const redoGraph = (graphId: string) => 
+  fetchApi(`/redo_graph/${graphId}`, { method: 'POST' });
+
 
 // --- createUser (Corregido) ---
 export const createUser = (requestData: { user_id?: string } = {}): Promise<{ user_id: string }> => {
@@ -33,10 +39,9 @@ export const getGraphHistory = (user_id: string): Promise<{ graphs: GraphSummary
 };
 
 // --- getGraph (Corregido) ---
-export const getGraph = (graph_id: string): Promise<{ graph: GraphData }> => {
-   if (!graph_id) return Promise.reject("Graph ID es requerido");
-  return fetchApi(`/get_graph/${graph_id}`);
-};
+export const getGraph = (graphId: string): Promise<{ graph: GraphData; history?: { 
+  can_undo: boolean; can_redo: boolean } }> => 
+  fetchApi(`/get_graph/${graphId}`)
 
 export const generateGraph = (
   message: string,
