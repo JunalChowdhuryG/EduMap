@@ -162,6 +162,16 @@ export const deleteGraph = (graph_id: string, user_id: string): Promise<{ succes
 };
 
 /**
+ * Actualiza el título (nombre) de un grafo
+ */
+export const updateGraphTitle = (graph_id: string, title: string, user_id?: string): Promise<{ success: boolean; id: string; title: string }> => {
+  return fetchApi('/update_graph_title', {
+    method: 'POST',
+    body: JSON.stringify({ graph_id, title, user_id }),
+  });
+};
+
+/**
  * (RF05) Guarda/Actualiza las preferencias de un usuario.
  */
 export const updatePreferences = (user_id: string, content: Preferences): Promise<{ preferences: Preferences }> => {

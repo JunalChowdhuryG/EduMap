@@ -1,5 +1,16 @@
 # app.py
 from groq import Groq
+# Cargar variables de entorno desde un archivo .env local durante desarrollo.
+# Esto permite ejecutar `python app.py` o `uvicorn app:app` sin tener que
+# exportar variables manualmente en cada terminal. En producción puedes usar
+# el gestor de configuración del entorno (systemd, docker env, etc.).
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    # Si python-dotenv no está instalado, no es fatal: el código seguirá
+    # intentando leer las variables de entorno desde el entorno del sistema.
+    pass
 from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -143,7 +154,14 @@ def get_db():
         db.close()
 
 # Cliente Groq
-client = Groq(api_key=os.environ.get("GROQ_API_KEY", "")) # Pega tu groq key!! (No la subas que el repo no permite xd)
+groq_key = os.environ.get("GROQ_API_KEY")
+if not groq_key:
+    # Mensaje más amigable y guía rápida para desarrollo local
+    print("ADVERTENCIA: La variable de entorno GROQ_API_KEY no está configurada. Si estás en desarrollo, crea un archivo .env con: GROQ_API_KEY=tu_clave")
+    # Inicializar cliente sin clave (el paquete puede lanzar error más adelante si la requiere)
+    client = Groq(api_key="")
+else:
+    client = Groq(api_key=groq_key)
 
 # SYSTEM_PROMPT 
 SYSTEM_PROMPT = """
@@ -200,6 +218,10 @@ class PreferenceRequest(BaseModel): content: Dict; user_id: str
 class CommentRequest(BaseModel): graph_id: str; node_id: str; text: str; user_id: str
 class DeleteNodeRequest(BaseModel): graph_id: str; node_id: str; user_id: str
 class DeleteGraphRequest(BaseModel): graph_id: str; user_id: str
+class UpdateGraphTitleRequest(BaseModel):
+    graph_id: str
+    title: str
+    user_id: Optional[str] = None
 
 
 # /create_user
@@ -470,6 +492,31 @@ async def delete_graph(request: DeleteGraphRequest, db: Session = Depends(get_db
         collaborations.pop(request.graph_id, None)
 
     return {"success": True}
+
+
+@app.post("/update_graph_title")
+async def update_graph_title(request: UpdateGraphTitleRequest, db: Session = Depends(get_db)):
+    graph = db.query(KnowledgeGraph).filter(KnowledgeGraph.id == request.graph_id).first()
+    if not graph:
+        raise HTTPException(status_code=404, detail="Grafo no encontrado")
+
+    # (Opcional) podríamos chequear permisos aquí: graph.user_id == request.user_id
+    graph.title = request.title
+    try:
+        db.commit()
+        db.refresh(graph)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error actualizando título: {e}")
+
+    # Notificar a clientes conectados del cambio (si aplica)
+    try:
+        final_graph_json = assemble_graph_json(request.graph_id, db)
+        await broadcast_update(request.graph_id, final_graph_json)
+    except Exception:
+        pass
+
+    return {"success": True, "id": graph.id, "title": graph.title}
 
 
 # --- 6. ENDPOINTS /expand_node y /refine_graph ACTUALIZADOS ---
