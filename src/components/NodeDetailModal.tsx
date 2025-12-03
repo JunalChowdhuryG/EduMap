@@ -1,4 +1,3 @@
-// src/components/NodeDetailModal.tsx
 import { useState, useRef } from 'react';
 import {
   X,
@@ -17,7 +16,7 @@ import * as api from '../lib/api';
 interface NodeDetailModalProps {
   node: Node | null;
   onClose: () => void;
-  onExpandNode: (node: Node, contextFileText?: string) => void; // Firma modificada
+  onExpandNode: (node: Node, contextFileText?: string) => void;
   onAddComment: (text: string) => Promise<void>;
   onDeleteNode: (node: Node) => Promise<void>;
   isDeleting: boolean;
@@ -35,14 +34,15 @@ export function NodeDetailModal({
   const [commentLoading, setCommentLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // --- Nuevos estados para carga de archivo ---
+  // --- EXPANSIÓN MEJORADA ---
   const [fileContext, setFileContext] = useState<string | null>(null);
+  const [manualContext, setManualContext] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!node) return null;
 
-  // Reproducir / detener descripción
+  // --- AUDIO ---
   const handlePlayAudio = () => {
     if (!node.description || !window.speechSynthesis) return;
 
@@ -61,7 +61,7 @@ export function NodeDetailModal({
     }
   };
 
-  // Añadir comentario
+  // --- COMENTARIOS ---
   const handleAddComment = async () => {
     if (!commentText.trim()) return;
     setCommentLoading(true);
@@ -75,7 +75,7 @@ export function NodeDetailModal({
     }
   };
 
-  // Subir archivo y extraer texto
+  // --- SUBIR ARCHIVO ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -85,7 +85,7 @@ export function NodeDetailModal({
       const result = await api.uploadFile(file);
       if (result.extracted_text) {
         setFileContext(result.extracted_text);
-        alert('Archivo procesado correctamente. El contenido se usará al expandir el nodo.');
+        alert('Archivo procesado correctamente.');
       }
     } catch (err) {
       alert('Error al subir el archivo');
@@ -94,46 +94,67 @@ export function NodeDetailModal({
     }
   };
 
+  // --- EXPANDIR COMBINANDO CONTEXTO ---
+  const handleExpandClick = () => {
+    let finalContext = '';
+
+    if (manualContext.trim()) {
+      finalContext += `Instrucciones/Contexto Manual:\n${manualContext}\n`;
+    }
+
+    if (fileContext) {
+      finalContext += `\nContenido del Archivo:\n${fileContext}`;
+    }
+
+    onExpandNode(node, finalContext.trim() || undefined);
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col border border-slate-700"
+        className="bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-slate-700"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* HEADER */}
         <div className="sticky top-0 bg-slate-900 px-6 py-4 flex justify-between items-center border-b border-slate-700">
           <h3 className="text-xl font-bold text-white">{node.label}</h3>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onDeleteNode(node)}
               disabled={isDeleting}
-              title="Eliminar este nodo"
-              className="p-1 hover:bg-red-900/50 rounded-full transition-colors text-red-500 hover:text-red-400"
+              className="p-1 hover:bg-red-900/50 rounded-full transition-colors text-red-500"
             >
               {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
             </button>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-slate-700 rounded-full transition-colors"
-            >
+            <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded-full">
               <X className="w-6 h-6 text-slate-400" />
             </button>
           </div>
         </div>
 
-        {/* Contenido */}
+        {/* CONTENIDO */}
         <div className="p-6 space-y-6 overflow-y-auto">
-          {/* === Herramientas de Expansión === */}
+
+          {/* === EXPANSIÓN MEJORADA === */}
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <h4 className="text-sm font-semibold text-slate-400 uppercase mb-3 flex items-center gap-2">
               <ZoomIn size={16} /> Herramientas de Expansión
             </h4>
 
             <div className="flex flex-col gap-3">
-              {/* Subir archivo */}
+
+              {/* TEXTO MANUAL */}
+              <textarea
+                value={manualContext}
+                onChange={(e) => setManualContext(e.target.value)}
+                placeholder="Escribe aquí instrucciones específicas para expandir este nodo..."
+                className="w-full h-24 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-sm text-white placeholder-slate-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+              />
+
+              {/* ARCHIVO */}
               <div className="flex items-center gap-3">
                 <input
                   type="file"
@@ -142,6 +163,7 @@ export function NodeDetailModal({
                   onChange={handleFileUpload}
                   accept=".pdf,.txt,.md,.docx"
                 />
+
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
@@ -151,27 +173,35 @@ export function NodeDetailModal({
                       : 'border-slate-500 text-slate-400 hover:bg-slate-700'
                   }`}
                 >
-                  {isUploading ? (
-                    <Loader2 className="animate-spin w-4 h-4" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  {fileContext ? 'Archivo Cargado (Listo para usar)' : 'Subir documento para expandir'}
+                  {isUploading ? <Loader2 className="animate-spin w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                  {fileContext ? 'Archivo Adjunto (Listo)' : 'Adjuntar documento (Opcional)'}
                 </button>
+
+                {fileContext && (
+                  <button
+                    onClick={() => setFileContext(null)}
+                    className="p-2 text-red-400 hover:bg-slate-700 rounded border border-slate-600"
+                    title="Quitar archivo"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
 
-              {/* Botón principal de expansión */}
+              {/* BOTÓN PRINCIPAL */}
               <button
-                onClick={() => onExpandNode(node, fileContext || undefined)}
+                onClick={handleExpandClick}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white font-medium"
               >
-                {fileContext ? <FileText size={18} /> : <ZoomIn size={18} />}
-                {fileContext ? 'Expandir usando Documento' : 'Expandir este Nodo (IA General)'}
+                <ZoomIn size={18} />
+                {(fileContext || manualContext)
+                  ? 'Expandir con Contexto Personalizado'
+                  : 'Expandir usando IA General'}
               </button>
             </div>
           </div>
 
-          {/* Tipo de Concepto */}
+          {/* TIPO */}
           <div>
             <h4 className="text-sm font-semibold text-slate-400 uppercase mb-2">Tipo de Concepto</h4>
             <span
@@ -186,15 +216,14 @@ export function NodeDetailModal({
             </span>
           </div>
 
-          {/* Descripción con botón de audio */}
+          {/* DESCRIPCIÓN */}
           <div>
             <div className="flex justify-between items-center mb-2">
               <h4 className="text-sm font-semibold text-slate-400 uppercase">Descripción</h4>
               {node.description && (
                 <button
                   onClick={handlePlayAudio}
-                  title={isPlaying ? 'Detener' : 'Reproducir descripción'}
-                  className="p-1 hover:bg-slate-700 rounded-full transition-colors text-slate-400 hover:text-white"
+                  className="p-1 hover:bg-slate-700 rounded-full text-slate-400"
                 >
                   {isPlaying ? <StopCircle className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </button>
@@ -205,13 +234,14 @@ export function NodeDetailModal({
             </p>
           </div>
 
-          {/* Comentarios */}
+          {/* COMENTARIOS */}
           <div>
             <h4 className="text-sm font-semibold text-slate-400 uppercase mb-2">
               Comentarios ({node.comments?.length || 0})
             </h4>
+
             <div className="space-y-3 max-h-40 overflow-y-auto bg-slate-900 p-3 rounded-lg">
-              {node.comments && node.comments.length > 0 ? (
+              {node.comments?.length ? (
                 node.comments.map((comment, index) => (
                   <div key={index} className="text-sm p-2 bg-slate-700 rounded">
                     <p className="text-slate-300">{comment.text}</p>
@@ -231,17 +261,18 @@ export function NodeDetailModal({
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Añadir un comentario..."
-                className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-slate-400"
+                className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
               />
               <button
                 onClick={handleAddComment}
                 disabled={commentLoading || !commentText.trim()}
-                className="p-2 w-10 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 transition-colors"
+                className="p-2 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
               >
                 {commentLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
               </button>
             </div>
           </div>
+
         </div>
       </div>
     </div>

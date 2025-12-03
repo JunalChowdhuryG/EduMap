@@ -538,10 +538,9 @@ async def expand_node(request: GraphRequest, db: Session = Depends(get_db)):
     
     request.previous_graph = await get_previous_graph_json(request.graph_id, db)
     
-    # Si hay contexto de archivo, lo inyectamos en el prompt
     context_instruction = ""
     if request.context:
-        context_instruction = f"\n\nUTILIZA ESTA INFORMACIÓN ADICIONAL DEL DOCUMENTO SUBIDO PARA EXPANDIR EL NODO:\n{request.context[:3000]}..." # Limitamos caracteres para no saturar
+        context_instruction = f"\n\nUTILIZA ESTA INFORMACIÓN ADICIONAL (PROVISTA POR EL USUARIO) PARA EXPANDIR EL NODO:\n{request.context[:5000]}..." 
 
     if not request.message.startswith("Expandir:"): 
         request.message = f"Expandir: {request.message}{context_instruction}"
