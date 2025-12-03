@@ -1,11 +1,7 @@
 // src/lib/api.ts
 import { GraphSummary, GraphData, QuizData, UserProfile, Preferences } from './types'; // Importar Preferences
 
-<<<<<<< HEAD
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.60.0.157:8000';
-=======
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.1.17.177:8000';
->>>>>>> fix/VisualFixes
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://192.168.1.35:8000';
 
 async function fetchApi(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -152,6 +148,26 @@ export const deleteNode = (graph_id: string, node_id: string, user_id: string): 
   return fetchApi('/delete_node', {
     method: 'POST',
     body: JSON.stringify({ graph_id, node_id, user_id }),
+  });
+};
+
+/**
+ * Elimina un grafo completo en el backend (RF05 - delete_graph)
+ */
+export const deleteGraph = (graph_id: string, user_id: string): Promise<{ success: boolean }> => {
+  return fetchApi('/delete_graph', {
+    method: 'POST',
+    body: JSON.stringify({ graph_id, user_id }),
+  });
+};
+
+/**
+ * Actualiza el título (nombre) de un grafo
+ */
+export const updateGraphTitle = (graph_id: string, title: string, user_id?: string): Promise<{ success: boolean; id: string; title: string }> => {
+  return fetchApi('/update_graph_title', {
+    method: 'POST',
+    body: JSON.stringify({ graph_id, title, user_id }),
   });
 };
 

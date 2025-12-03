@@ -9,8 +9,9 @@ import { QuizModal } from './QuizModal';
 import { useGraphTour } from '../lib/useGraphTour';
 import {
   Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload,
+  Trash2,
   HelpCircle, BarChart2, Save, LogOut, Settings,
-  FileJson, Play, StopCircle, Trophy
+  FileJson, Play, StopCircle, Trophy, Edit3
 } from 'lucide-react';
 import { Award, GraduationCap, Star } from 'lucide-react';
 
@@ -310,6 +311,39 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     } finally { setDeleteLoading(false); }
   };
 
+  const handleEditGraph = async () => {
+    if (!user_id || !selectedGraph) { setError('Se requiere sesión y grafo para editar.'); return; }
+    const currentTitle = selectedGraph.title || '';
+    const newTitle = window.prompt('Nuevo título del grafo:', currentTitle);
+    if (newTitle === null) return; // cancel
+    if (!newTitle.trim()) { setError('El título no puede estar vacío.'); return; }
+
+    setLoading(true); setError('');
+    try {
+      await api.updateGraphTitle(selectedGraph.id, newTitle, user_id);
+      // Actualizar estado local
+      setGraphs(prev => prev.map(g => g.id === selectedGraph.id ? { ...g, title: newTitle } : g));
+      setSelectedGraph(prev => prev ? { ...prev, title: newTitle } : prev);
+    } catch (err: any) {
+      setError('Error al actualizar título: ' + (err?.message || String(err)));
+    } finally { setLoading(false); }
+  };
+
+  const handleDeleteGraph = async () => {
+    if (!user_id || !selectedGraph) { setError("Se requiere sesión y grafo para eliminar."); return; }
+    if (!confirm(`¿Estás seguro de que quieres eliminar el grafo "${selectedGraph.title || selectedGraph.id}"? Esta acción es irreversible.`)) return;
+
+    setLoading(true);
+    try {
+      await api.deleteGraph(selectedGraph.id, user_id);
+      setGraphs(prev => prev.filter(g => g.id !== selectedGraph.id));
+      setSelectedGraph(null);
+      setGraphData({ nodes: [], edges: [] });
+    } catch (err: any) {
+      setError("Error al borrar grafo: " + (err?.message || String(err)));
+    } finally { setLoading(false); }
+  };
+
   // --- Handlers para Quiz ---
   const handleStartQuiz = async () => {
     if (!selectedGraph) return;
@@ -477,6 +511,24 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                                 : 'bg-slate-700 hover:bg-slate-600 text-white')
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       > <FocusIcon size={16} /> Enfocar Tópico </button>
+                      <button
+                        onClick={handleEditGraph}
+                        disabled={!selectedGraph}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          preferences.theme === 'light'
+                            ? 'bg-slate-100 hover:bg-slate-200 text-theme-text-primary'
+                            : 'bg-slate-700 hover:bg-slate-600 text-white'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      > <Edit3 size={16} /> Editar Título </button>
+                      <button
+                        onClick={handleDeleteGraph}
+                        disabled={!selectedGraph}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          preferences.theme === 'light'
+                            ? 'bg-red-100 hover:bg-red-200 text-red-700'
+                            : 'bg-red-700 hover:bg-red-600 text-white'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      > <Trash2 size={16} /> Borrar Grafo </button>
                    </div>
               </div>
            </div>
