@@ -1,5 +1,5 @@
 // src/components/GraphDashboard.tsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import * as api from '../lib/api';
 import { GraphSummary, GraphData, Node as NodeType, Preferences, QuizData, UserProfile } from '../lib/types';
 import { GraphVisualization, GraphVisualizationHandle } from './GraphVisualization';
@@ -9,11 +9,13 @@ import { QuizModal } from './QuizModal';
 import { useGraphTour } from '../lib/useGraphTour';
 import {
   Plus, FileText, Sparkles, FocusIcon, RefreshCw, Loader2, Upload,
-  Trash2,
-  HelpCircle, BarChart2, Save, LogOut, Settings,
+  Trash2, HelpCircle, BarChart2, Save, LogOut, Settings,
   FileJson, Play, StopCircle, Trophy, Edit3
 } from 'lucide-react';
 import { Award, GraduationCap, Star } from 'lucide-react';
+
+// Nuevos íconos usados en la UI añadida
+import { Search, History, RotateCcw, RotateCw, AlertCircle, X, Check } from 'lucide-react';
 
 interface ModalNode extends NodeType {}
 
@@ -50,6 +52,25 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
 
+  // --- NUEVOS ESTADOS SOLICITADOS ---
+  const [searchTerm, setSearchTerm] = useState(''); // Buscador
+  const [versions, setVersions] = useState<any[]>([]); // Historial de versiones
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  // Estados para Modales Personalizados
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [tempTitle, setTempTitle] = useState('');
+
+  // Mensajes de espera aleatorios para UX
+  const loadingMessages = [
+    "Conectando neuronas artificiales...",
+    "Estructurando el conocimiento...",
+    "Analizando relaciones complejas...",
+    "Generando visualización..."
+  ];
+  const [loadingMsg, setLoadingMsg] = useState(loadingMessages[0]);
+
   const { startTour, stopTour, isTouring, currentNodeId } = useGraphTour(
     graphData.nodes,
     graphData.edges
@@ -79,7 +100,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
       }
     };
     initUser();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 2. Cargar Perfil (Gamificación)
@@ -104,7 +125,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
       if (!user_id) return;
       try {
         const data = await api.getPreferences(user_id);
-        setPreferences({ ...defaultPreferences, ...data.preferences }); 
+        setPreferences({ ...defaultPreferences, ...data.preferences });
       } catch (err: any) {
         console.error("Error al cargar preferencias:", err);
       }
@@ -131,12 +152,12 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
   useEffect(() => {
     const connectWebSocket = (graphId: string) => {
       if (ws.current) ws.current.close();
-      
+
       const wsUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000').replace('http', 'ws');
       ws.current = new WebSocket(`${wsUrl}/ws/${graphId}`);
 
       ws.current.onopen = () => console.log(`WebSocket conectado: ${graphId}`);
-      
+
       ws.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -175,6 +196,33 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     return () => { if (ws.current) ws.current.close(); };
   }, [selectedGraph]);
 
+  // --- NUEVO: Cargar historial de versiones cuando se selecciona un grafo o cambia graphData ---
+  useEffect(() => {
+    if (!selectedGraph) {
+      setVersions([]);
+      return;
+    }
+    const loadVersions = async () => {
+      try {
+        const data = await api.getGraphVersions(selectedGraph.id);
+        setVersions(data.versions || []);
+      } catch (err) {
+        console.error("Error cargando versiones:", err);
+        setVersions([]);
+      }
+    };
+    loadVersions();
+  }, [selectedGraph, graphData]);
+
+  // EFECTO: Rotar mensaje de carga
+  useEffect(() => {
+    if (loading) {
+      const interval = setInterval(() => {
+        setLoadingMsg(loadingMessages[Math.floor(Math.random() * loadingMessages.length)]);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [loading]);
 
   // --- HANDLERS ---
 
@@ -311,6 +359,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     } finally { setDeleteLoading(false); }
   };
 
+  // Mantengo ambas estrategias: la antigua (prompt) y la nueva (modal).
   const handleEditGraph = async () => {
     if (!user_id || !selectedGraph) { setError('Se requiere sesión y grafo para editar.'); return; }
     const currentTitle = selectedGraph.title || '';
@@ -344,6 +393,57 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     } finally { setLoading(false); }
   };
 
+  // --- FUNCIONALIDAD DE VERSIONADO (RESTORE / UNDO) ---
+  const handleRestore = async (versionId: string) => {
+    if (!selectedGraph) return;
+    setIsRestoring(true);
+    try {
+      const result = await api.restoreVersion(versionId);
+      if (result?.graph) {
+        setGraphData(result.graph);
+      }
+    } catch (err: any) {
+      setError("Error al restaurar versión: " + (err?.message || String(err)));
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleUndo = () => {
+    // Restaurar la penúltima versión (la última es la actual)
+    if (versions.length < 2) return;
+    const previousVersion = versions[versions.length - 2];
+    handleRestore(previousVersion.id);
+  };
+
+  // --- NUEVOS HANDLERS DE GESTIÓN (modales) ---
+  const confirmDeleteGraph = async () => {
+    if (!selectedGraph || !user_id) return;
+    setLoading(true);
+    try {
+      await api.deleteGraph(selectedGraph.id, user_id);
+      setGraphs(prev => prev.filter(g => g.id !== selectedGraph!.id));
+      setSelectedGraph(null);
+      setGraphData({ nodes: [], edges: [] });
+      setShowDeleteModal(false);
+    } catch (err: any) {
+      setError(err.message || 'Error al eliminar grafo');
+    } finally { setLoading(false); }
+  };
+
+  const confirmRenameGraph = async () => {
+    if (!selectedGraph || !user_id || !tempTitle.trim()) return;
+    setLoading(true);
+    try {
+      await api.updateGraphTitle(selectedGraph.id, tempTitle, user_id);
+      setGraphs(prev => prev.map(g => g.id === selectedGraph.id ? { ...g, title: tempTitle } : g));
+      setSelectedGraph(prev => prev ? { ...prev, title: tempTitle } : prev);
+      setShowRenameModal(false);
+    } catch (err: any) {
+      setError(err.message || 'Error renombrando grafo');
+    } finally { setLoading(false); }
+  };
+
   // --- Handlers para Quiz ---
   const handleStartQuiz = async () => {
     if (!selectedGraph) return;
@@ -366,21 +466,28 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
     } catch (e) { console.error("Error actualizando stats", e); }
   };
 
+  // --- LÓGICA DEL BUSCADOR ---
+  const filteredGraphs = useMemo(() => {
+    if (!searchTerm.trim()) return graphs;
+    return graphs.filter(g =>
+      (g.title || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [graphs, searchTerm]);
+
   // --- RENDER ---
   const themeClass = preferences.theme === 'light' ? 'theme-light' : 'theme-dark';
   const personaClass = `persona-${preferences.persona_type}`;
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${themeClass} ${personaClass}`}>
-      
       {/* HEADER */}
       <header className="border-b border-theme-border bg-theme-header-bg bg-opacity-50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-theme-accent">
             EduMap <span className="text-sm font-normal text-theme-text-secondary ml-2 capitalize">({preferences.persona_type})</span>
           </h1>
-          
-          {/* --- PERFIL VISUAL (Gamificación) --- */}
+
+          {/* PERFIL VISUAL (Gamificación) */}
           {userProfile && (
             <div className="hidden md:flex items-center gap-4 bg-slate-800/50 px-4 py-1 rounded-full border border-slate-700">
               <div className="flex items-center gap-1 text-yellow-400" title="Nivel">
@@ -403,7 +510,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-1">
                 <button onClick={() => setShowSettingsModal(true)} title="Ajustes (RF05)" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon"> <Settings size={20} /> </button>
-                
+
                 {(preferences.persona_type === 'profesor' || preferences.persona_type === 'investigador') && (
                   <>
                     <button onClick={handleExportJSON} title="Exportar JSON (RF08)" disabled={!selectedGraph || graphData.nodes.length === 0} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <FileJson size={20} /> </button>
@@ -421,7 +528,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                 {preferences.persona_type === 'investigador' && (
                   <button onClick={handleAnalysis} title="Analizar Grafo (RF09)" disabled={!selectedGraph} className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50"> <BarChart2 size={20} /> </button>
                 )}
-                
+
                 {/* BOTÓN DE QUIZ */}
                 <button onClick={handleStartQuiz} disabled={!selectedGraph || quizLoading} title="Iniciar Evaluación" className="p-2 hover:bg-theme-hover rounded-lg transition-colors text-theme-icon disabled:opacity-50 text-yellow-400"> {quizLoading ? <Loader2 className="animate-spin" size={20}/> : <Trophy size={20} />} </button>
 
@@ -435,19 +542,31 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
         </div>
       </header>
 
-      {/* BODY (Esto es lo que faltaba en tu código) */}
+      {/* BODY */}
       <div className="max-w-7xl mx-auto px-4 py-6 text-theme-text-primary">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-180px)]">
-           
            {/* BARRA LATERAL */}
            <div className="lg:col-span-1 space-y-4 overflow-auto">
              <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <h2 className="text-lg font-semibold mb-4">Grafos de esta Sesión</h2>
+
+                {/* Buscador */}
+                <div className="relative mb-3">
+                  <input
+                    type="text"
+                    placeholder="Buscar grafo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-theme-input-bg border border-theme-border rounded-md text-sm text-theme-text-primary focus:ring-1 focus:ring-theme-accent outline-none"
+                  />
+                  <Search className="absolute left-3 top-2.5 text-theme-text-secondary w-4 h-4" />
+                </div>
+
                  {loading && graphs.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
                  {!loading && graphs.length === 0 && !error && <p className="text-sm text-slate-500">Crea tu primer grafo.</p>}
                  {error && <p className="text-sm text-red-400">{error}</p>}
-                <div className="space-y-2 mt-2">
-                    {graphs.map((graph) => (
+                <div className="space-y-2 mt-2 max-h-[320px] overflow-y-auto">
+                    {filteredGraphs.map((graph) => (
                     <button
                       key={graph.id}
                       onClick={() => setSelectedGraph(graph)}
@@ -462,6 +581,7 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                         <div className="font-medium truncate">{graph.title || 'Grafo sin título'}</div>
                     </button>
                     ))}
+                    {filteredGraphs.length === 0 && <p className="text-xs text-center text-slate-500 py-2">No se encontraron grafos</p>}
                 </div>
              </div>
 
@@ -535,6 +655,49 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
 
            {/* ÁREA PRINCIPAL */}
            <div className="lg:col-span-3 flex flex-col gap-4">
+              {/* Barra superior del grafo: Undo/Redo, versiones, rename/delete (con modales) */}
+              <div className="flex justify-between items-center bg-theme-secondary-bg p-2 rounded-lg border border-theme-border">
+                 <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleUndo}
+                      disabled={versions.length < 2 || isRestoring}
+                      className="p-2 hover:bg-theme-hover rounded text-theme-text-primary disabled:opacity-30"
+                      title="Deshacer (Volver a versión anterior)"
+                    >
+                      <RotateCcw size={18} />
+                    </button>
+                    <button
+                      disabled={true}
+                      className="p-2 hover:bg-theme-hover rounded text-theme-text-primary disabled:opacity-30"
+                      title="Rehacer (no implementado)"
+                    >
+                      <RotateCw size={18} />
+                    </button>
+                    <span className="text-xs text-slate-500 ml-2">
+                      {versions.length} versiones guardadas
+                    </span>
+                 </div>
+
+                 <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setTempTitle(selectedGraph?.title || ''); setShowRenameModal(true); }}
+                      disabled={!selectedGraph}
+                      className="p-2 hover:bg-blue-900/30 text-blue-400 rounded transition-colors"
+                      title="Renombrar Grafo"
+                    >
+                      <Edit3 size={18} />
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteModal(true)}
+                      disabled={!selectedGraph}
+                      className="p-2 hover:bg-red-900/30 text-red-400 rounded transition-colors"
+                      title="Eliminar Grafo"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                 </div>
+              </div>
+
               <div className="bg-theme-secondary-bg rounded-lg p-4 border border-theme-border">
                 <textarea
                   value={inputText}
@@ -553,6 +716,15 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
               </div>
 
                 <div className="flex-1 bg-theme-secondary-bg rounded-lg border border-theme-border overflow-auto min-h-0 relative">
+                  {/* NUEVO: PANTALLA DE CARGA MEJORADA */}
+                  {(loading || isRestoring) && (
+                    <div className="absolute inset-0 z-50 bg-theme-secondary-bg/90 backdrop-blur-sm flex flex-col items-center justify-center text-theme-text-primary">
+                      <Loader2 className="w-12 h-12 animate-spin text-theme-accent mb-4" />
+                      <p className="text-lg font-medium animate-pulse">{loadingMsg}</p>
+                      <p className="text-sm text-theme-text-secondary mt-2">Por favor espera...</p>
+                    </div>
+                  )}
+
                     {loading && <div className="flex items-center justify-center h-full text-theme-text-secondary"><Loader2 className="animate-spin mr-2"/> Cargando...</div>}
                     {!loading && graphData.nodes.length > 0 ? (
                         <div className="w-full h-full min-h-0">
@@ -578,7 +750,6 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
                     )}
                 </div>
            </div>
-
         </div>
       </div>
 
@@ -617,6 +788,67 @@ export function GraphDashboard({ userEmail, onLogout }: GraphDashboardProps) {
           onClose={() => setShowQuiz(false)}
           onComplete={handleQuizComplete}
         />
+      )}
+
+      {/* --- MODAL ELIMINAR (MEJORADO) --- */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-red-500/30 rounded-xl shadow-2xl max-w-md w-full p-6 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500"></div>
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-red-500/10 rounded-full">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white mb-2">¿Eliminar Grafo?</h3>
+                <p className="text-slate-300 text-sm mb-4">
+                  Estás a punto de eliminar <strong>"{selectedGraph?.title}"</strong>.
+                  Esta acción borrará todas las versiones y nodos asociados y no se puede deshacer.
+                </p>
+                <div className="flex gap-3 justify-end mt-6">
+                  <button
+                    onClick={() => setShowDeleteModal(false)}
+                    className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmDeleteGraph}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-lg shadow-red-900/20 transition-all"
+                  >
+                    Sí, eliminar definitivamente
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL RENOMBRAR --- */}
+      {showRenameModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-white">Renombrar Grafo</h3>
+              <button onClick={() => setShowRenameModal(false)} className="text-slate-400 hover:text-white"><X size={20}/></button>
+            </div>
+
+            <input
+              value={tempTitle}
+              onChange={(e) => setTempTitle(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none mb-6"
+              autoFocus
+            />
+
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowRenameModal(false)} className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded-lg">Cancelar</button>
+              <button onClick={confirmRenameGraph} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2">
+                <Check size={18} /> Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

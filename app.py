@@ -29,8 +29,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 import networkx as nx
 import random
-
-
+import datetime
+from sqlalchemy import DateTime
 # Usamos un nuevo nombre de archivo para la base de datos relacional.
 DATABASE_URL = "sqlite:///./knowledge_graphs_relational.db"
 DB_FILE = "./knowledge_graphs_relational.db"
@@ -155,6 +155,7 @@ def get_db():
 
 # Cliente Groq
 groq_key = os.environ.get("GROQ_API_KEY")
+groq_key = "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"
 if not groq_key:
     # Mensaje más amigable y guía rápida para desarrollo local
     print("ADVERTENCIA: La variable de entorno GROQ_API_KEY no está configurada. Si estás en desarrollo, crea un archivo .env con: GROQ_API_KEY=tu_clave")
@@ -199,9 +200,12 @@ Responde ÚNICAMENTE con un objeto JSON válido en el siguiente formato, sin tex
 """
 
 app = FastAPI()
-origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://10.60.0.157:5173"] # Añadida IP de ejemplo
+origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://10.1.16.61:5173"] # Añadida IP de ejemplo
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 collaborations: Dict[str, List[WebSocket]] = defaultdict(list)
+
+
+
 
 # Clases Pydantic 
 class GraphRequest(BaseModel): 
@@ -328,7 +332,7 @@ async def generate_graph(request: GraphRequest, db: Session = Depends(get_db)):
 
     try:
         completion = client.chat.completions.create(
-            model="openai/gpt-oss-120b", messages=messages, temperature=0.7, max_tokens=8000, max_completion_tokens=8192,
+            model="meta-llama/llama-4-maverick-17b-128e-instruct", messages=messages, temperature=0.7, max_tokens=8000, max_completion_tokens=8192,
         )
         json_response = completion.choices[0].message.content
         json_match = re.search(r'\{[\s\S]*\}', json_response)
@@ -556,7 +560,7 @@ async def generate_quiz(request: QuizRequest, db: Session = Depends(get_db)):
     nodes_text = ", ".join([n["label"] for n in graph_json["nodes"][:20]]) # Usamos los primeros 20 nodos
     prompt = f"""
     Basado en estos conceptos: {nodes_text}.
-    Genera 5 preguntas de opción múltiple para evaluar el conocimiento del estudiante.
+    Genera 10 preguntas de opción múltiple para evaluar el conocimiento del estudiante.
     
     Responde ÚNICAMENTE con un JSON válido con este formato exacto:
     {{
@@ -798,3 +802,93 @@ if __name__ == "__main__":
     import uvicorn
     if not os.environ.get("GROQ_API_KEY"): print("ADVERTENCIA: GROQ_API_KEY no está configurada como variable de entorno.")
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+
+
+class GraphVersion(Base):
+    __tablename__ = "graph_versions"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    graph_id = Column(String, ForeignKey("knowledge_graphs.id", ondelete="CASCADE"), nullable=False)
+    content = Column(SQLJSON, nullable=False) # Guardamos el JSON completo {nodes, edges}
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    graph = relationship("KnowledgeGraph", back_populates="versions")
+
+#
+KnowledgeGraph.versions = relationship("GraphVersion", back_populates="graph", cascade="all, delete-orphan", order_by="GraphVersion.created_at")
+
+# Crear la tabla nueva si no existe
+Base.metadata.create_all(bind=engine)
+
+# --- FUNCIÓN AUXILIAR PARA GUARDAR VERSIÓN ---
+def save_graph_snapshot(db: Session, graph_id: str):
+    """Guarda el estado actual del grafo como una nueva versión."""
+    graph_json = assemble_graph_json(graph_id, db)
+    new_version = GraphVersion(graph_id=graph_id, content=graph_json)
+    db.add(new_version)
+    db.commit()
+
+
+@app.get("/graph_versions/{graph_id}")
+async def get_graph_versions(graph_id: str, db: Session = Depends(get_db)):
+    """Obtiene la lista de versiones (historial) de un grafo."""
+    versions = db.query(GraphVersion).filter(GraphVersion.graph_id == graph_id).order_by(GraphVersion.created_at.asc()).all()
+    return {"versions": [{"id": v.id, "created_at": v.created_at, "node_count": len(v.content.get('nodes', []))} for v in versions]}
+
+@app.post("/restore_version/{version_id}")
+async def restore_version(version_id: str, db: Session = Depends(get_db)):
+    """Restaura el grafo a una versión específica."""
+    version = db.query(GraphVersion).filter(GraphVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Versión no encontrada")
+    
+    graph_id = version.graph_id
+    content = version.content
+    
+    # 1. Borrar estado actual (nodos y ejes)
+    db.query(GraphEdge).filter(GraphEdge.graph_id == graph_id).delete()
+    db.query(GraphNode).filter(GraphNode.graph_id == graph_id).delete()
+    
+    # 2. Reconstruir nodos desde el JSON histórico
+    id_map = {} # Mapeo de IDs viejos a nuevos (o mantener los mismos si son UUID válidos)
+    
+    for n in content.get("nodes", []):
+        new_node = GraphNode(
+            id=n["id"], # Mantenemos el ID original para consistencia
+            label=n["label"],
+            description=n.get("description"),
+            node_type=n.get("type"),
+            color=n.get("color"),
+            comments=n.get("comments", []),
+            graph_id=graph_id,
+            owner_id=n.get("owner_id") # Asumiendo que el dueño es el mismo
+        )
+        # Si owner_id falta (versiones viejas), buscar owner del grafo
+        if not new_node.owner_id:
+             graph = db.query(KnowledgeGraph).filter(KnowledgeGraph.id == graph_id).first()
+             new_node.owner_id = graph.user_id
+             
+        db.add(new_node)
+    
+    # 3. Reconstruir ejes
+    for e in content.get("edges", []):
+        new_edge = GraphEdge(
+            id=str(uuid.uuid4()),
+            label=e.get("label"),
+            graph_id=graph_id,
+            source_node_id=e["from"],
+            target_node_id=e["to"]
+        )
+        db.add(new_edge)
+        
+    db.commit()
+    
+    # 4. Guardar ESTA restauración como una NUEVA versión al final de la pila (estilo navegador)
+    save_graph_snapshot(db, graph_id)
+    
+    final_graph = assemble_graph_json(graph_id, db)
+    await broadcast_update(graph_id, final_graph)
+    return {"graph": final_graph}

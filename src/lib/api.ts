@@ -1,7 +1,7 @@
 // src/lib/api.ts
 import { GraphSummary, GraphData, QuizData, UserProfile, Preferences } from './types'; // Importar Preferences
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://192.168.1.35:8000';
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://10.1.16.61:8000';
 
 async function fetchApi(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -45,7 +45,18 @@ export const generateGraph = (
     body: JSON.stringify({ message, user_id, title, previous_graph }),
   });
 };
+export interface GraphVersionSummary {
+  id: string;
+  created_at: string;
+  node_count: number;
+}
+export const getGraphVersions = (graph_id: string): Promise<{ versions: GraphVersionSummary[] }> => {
+  return fetchApi(`/graph_versions/${graph_id}`);
+};
 
+export const restoreVersion = (version_id: string): Promise<{ graph: GraphData }> => {
+  return fetchApi(`/restore_version/${version_id}`, { method: 'POST' });
+};
 export const refineGraph = (
   feedback: string,
   graph_id: string,
