@@ -33,7 +33,7 @@ if os.path.exists(OLD_DB_FILE):
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
 )
-#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
+
 # Habilitar claves foráneas (FK) para SQLite para que funcione ON DELETE CASCADE
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -143,7 +143,7 @@ def get_db():
         db.close()
 
 # Cliente Groq
-client = Groq(api_key=os.environ.get("GROQ_API_KEY", "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"))
+client = Groq(api_key=os.environ.get("GROQ_API_KEY", "")) # Pega tu groq key!! (No la subas que el repo no permite xd)
 
 # SYSTEM_PROMPT 
 SYSTEM_PROMPT = """
@@ -199,6 +199,7 @@ class UserRequest(BaseModel): user_id: Optional[str] = None
 class PreferenceRequest(BaseModel): content: Dict; user_id: str
 class CommentRequest(BaseModel): graph_id: str; node_id: str; text: str; user_id: str
 class DeleteNodeRequest(BaseModel): graph_id: str; node_id: str; user_id: str
+class DeleteGraphRequest(BaseModel): graph_id: str; user_id: str
 
 
 # /create_user
@@ -429,6 +430,46 @@ async def delete_node(request: DeleteNodeRequest, db: Session = Depends(get_db))
     await broadcast_update(request.graph_id, final_graph_json)
 
     return {"graph": final_graph_json}
+
+
+# --- 5.b ENDPOINT /delete_graph (nuevo) ---
+@app.post("/delete_graph")
+async def delete_graph(request: DeleteGraphRequest, db: Session = Depends(get_db)):
+    # Buscar el grafo
+    graph = db.query(KnowledgeGraph).filter(KnowledgeGraph.id == request.graph_id).first()
+    if not graph:
+        raise HTTPException(status_code=404, detail="Grafo no encontrado")
+
+    """
+    # Permisos: solo el propietario puede borrar el grafo
+    if graph.user_id != request.user_id:
+        raise HTTPException(status_code=403, detail="Acción denegada: No puedes eliminar un grafo que no te pertenece.")
+    """
+    
+    try:
+        db.delete(graph)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error de base de datos al eliminar grafo: {e}")
+
+    # Notificar a clientes conectados (enviar grafo vacío) y cerrar conexiones WebSocket
+    try:
+        await broadcast_update(request.graph_id, {"nodes": [], "edges": []})
+    except Exception:
+        pass
+
+    # Cerrar y limpiar colaboraciones si existen
+    conns = collaborations.get(request.graph_id, [])
+    for ws in list(conns):
+        try:
+            await ws.close(code=1000, reason="Graph deleted")
+        except Exception:
+            pass
+    if request.graph_id in collaborations:
+        collaborations.pop(request.graph_id, None)
+
+    return {"success": True}
 
 
 # --- 6. ENDPOINTS /expand_node y /refine_graph ACTUALIZADOS ---
